@@ -10,6 +10,19 @@ function parseDecisionIds(value: string) {
   }
 }
 
+function buildDecisionHref(filters: { decisionId?: string; company?: string }) {
+  const params = new URLSearchParams();
+  if (filters.decisionId) {
+    params.set("decisionId", filters.decisionId);
+  }
+  if (filters.company) {
+    params.set("company", filters.company);
+  }
+
+  const query = params.toString();
+  return query ? `/decisions?${query}` : "/decisions";
+}
+
 export function FirmsSection({ firms }: Pick<DashboardData, "firms">) {
   return (
     <Card className="overflow-hidden">
@@ -48,6 +61,12 @@ export function FirmsSection({ firms }: Pick<DashboardData, "firms">) {
                       <p className="text-xs text-muted">
                         Updated {new Date(firm.updatedAt).toLocaleString()}
                       </p>
+                      <a
+                        href={buildDecisionHref({ company: firm.name })}
+                        className="mt-1 inline-flex text-xs text-info hover:text-blue-300"
+                      >
+                        View decisions for {firm.name}
+                      </a>
                       {firm.linkedinUrl ? (
                         <a
                           href={firm.linkedinUrl}
@@ -73,12 +92,13 @@ export function FirmsSection({ firms }: Pick<DashboardData, "firms">) {
                     {decisionIds.length > 0 ? (
                       <div className="flex flex-wrap gap-2">
                         {decisionIds.map((decisionId) => (
-                          <code
+                          <a
                             key={decisionId}
-                            className="rounded-full border border-line bg-slate-950/50 px-2.5 py-1 text-[11px] text-slate-300"
+                            href={buildDecisionHref({ decisionId })}
+                            className="rounded-full border border-line bg-slate-950/50 px-2.5 py-1 text-[11px] text-slate-300 hover:border-blue-400/40 hover:text-blue-300"
                           >
                             {decisionId}
-                          </code>
+                          </a>
                         ))}
                       </div>
                     ) : (

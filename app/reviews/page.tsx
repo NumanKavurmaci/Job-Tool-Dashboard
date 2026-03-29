@@ -3,6 +3,8 @@ import { PageShell } from "@/components/dashboard/page-shell";
 import { ReviewsSection } from "@/components/dashboard/reviews-section";
 import { getDashboardData } from "@/lib/dashboard-data";
 
+export const dynamic = "force-dynamic";
+
 export default function ReviewsPage() {
   const data = getDashboardData();
 

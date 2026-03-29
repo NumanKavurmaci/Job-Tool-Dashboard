@@ -1,6 +1,19 @@
 import type { DashboardData } from "@/lib/dashboard-data";
 import { Badge, Card, SectionTitle } from "@/components/ui";
 
+function buildDecisionHref(filters: { company?: string; jobUrl?: string }) {
+  const params = new URLSearchParams();
+  if (filters.company) {
+    params.set("company", filters.company);
+  }
+  if (filters.jobUrl) {
+    params.set("jobUrl", filters.jobUrl);
+  }
+
+  const query = params.toString();
+  return query ? `/decisions?${query}` : "/decisions";
+}
+
 export function ReviewsSection({ reviews }: Pick<DashboardData, "reviews">) {
   return (
     <Card className="overflow-hidden">
@@ -26,9 +39,29 @@ export function ReviewsSection({ reviews }: Pick<DashboardData, "reviews">) {
                 <td className="py-4 pr-4">
                   <div className="space-y-1">
                     <p className="font-medium text-text">{review.title ?? "Unknown title"}</p>
-                    <p className="text-muted">{review.company ?? "Unknown company"}</p>
+                    {review.companyLinkedinUrl ? (
+                      <a
+                        href={review.companyLinkedinUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex text-muted hover:text-blue-300"
+                      >
+                        {review.company ?? "Unknown company"}
+                      </a>
+                    ) : (
+                      <p className="text-muted">{review.company ?? "Unknown company"}</p>
+                    )}
                     <a href={review.jobUrl} className="font-mono text-xs text-info">
                       {review.jobUrl}
+                    </a>
+                    <a
+                      href={buildDecisionHref({
+                        ...(review.company ? { company: review.company } : {}),
+                        jobUrl: review.jobUrl,
+                      })}
+                      className="block text-xs text-info hover:text-blue-300"
+                    >
+                      View related decisions
                     </a>
                   </div>
                 </td>

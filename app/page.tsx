@@ -6,6 +6,8 @@ import { LogsSection } from "@/components/dashboard/logs-section";
 import { StatsOverview } from "@/components/dashboard/stats-overview";
 import { getDashboardData } from "@/lib/dashboard-data";
 
+export const dynamic = "force-dynamic";
+
 export default function HomePage() {
   const data = getDashboardData();
 

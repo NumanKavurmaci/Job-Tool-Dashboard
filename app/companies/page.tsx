@@ -3,6 +3,8 @@ import { PageIntro } from "@/components/dashboard/page-intro";
 import { PageShell } from "@/components/dashboard/page-shell";
 import { getDashboardData } from "@/lib/dashboard-data";
 
+export const dynamic = "force-dynamic";
+
 export default function CompaniesPage() {
   const data = getDashboardData();
 

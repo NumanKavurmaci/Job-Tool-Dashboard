@@ -1,4 +1,4 @@
-# Job Test Dashboard
+# Job Tool Dashboard
 
 External read-only dashboard for the Job Tool engine.
 
@@ -18,10 +18,27 @@ It currently reads:
 
 - `prisma/dev.db`
 - `logs/app.log`
-- `artifacts/batch-runs`
-- `artifacts/screenshots`
+- `artifacts/*`
 
 from the engine workspace configured by `ENGINE_ROOT`.
+
+## Pages
+
+- `/`
+  - high-level overview
+  - stats
+  - engine workspace summary
+  - quick links into the deeper views
+- `/reviews`
+  - review history rows from `JobReviewHistory`
+- `/decisions`
+  - detailed application decisions from `ApplicationDecision`
+- `/answers`
+  - prepared Easy Apply answer sets and reusable answer memory
+- `/artifacts`
+  - recent run artifacts and previews
+- `/companies`
+  - firm-level aggregates, logos, LinkedIn URLs, and linked decisions
 
 ## Setup
 
@@ -42,6 +59,21 @@ cp .env.example .env
 ```bash
 npm run dev
 ```
+
+## Verification
+
+```bash
+npm run type-check
+npm test
+npm run build
+```
+
+## Documentation
+
+AI-first file maps live in:
+
+- [docs/README.md](./docs\README.md)
+- [docs/FILE_MAP.md](./docs\FILE_MAP.md)
 
 ## Notes
 

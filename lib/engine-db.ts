@@ -37,6 +37,23 @@ export type ReviewRow = {
   createdAt: string;
   title: string | null;
   company: string | null;
+  companyLinkedinUrl: string | null;
+  location: string | null;
+};
+
+export type DecisionRow = {
+  id: string;
+  decision: string;
+  score: number;
+  policyAllowed: number;
+  reasons: string;
+  createdAt: string;
+  jobPostingId: string;
+  jobUrl: string;
+  title: string | null;
+  company: string | null;
+  companyLogoUrl: string | null;
+  companyLinkedinUrl: string | null;
   location: string | null;
 };
 
@@ -48,6 +65,31 @@ export type SystemLogRow = {
   runType: string | null;
   jobUrl: string | null;
   createdAt: string;
+};
+
+export type PreparedAnswerSetRow = {
+  id: string;
+  jobPostingId: string | null;
+  createdAt: string;
+  questionsJson: string;
+  answersJson: string;
+  jobUrl: string | null;
+  title: string | null;
+  company: string | null;
+};
+
+export type AnswerCacheRow = {
+  id: string;
+  normalizedQuestion: string;
+  label: string;
+  questionType: string;
+  strategy: string;
+  answerJson: string;
+  confidenceLabel: string;
+  source: string;
+  notesJson: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 function openDb(): Database.Database {
@@ -105,6 +147,7 @@ export function readRecentReviews(limit = 20): ReviewRow[] {
           h.createdAt,
           j.title,
           j.company,
+          j.companyLinkedinUrl,
           j.location
         FROM JobReviewHistory h
         LEFT JOIN JobPosting j ON j.id = h.jobPostingId
@@ -158,6 +201,121 @@ export function readRecentFirms(limit = 12): FirmRow[] {
         `,
       )
       .all(limit) as FirmRow[];
+  } finally {
+    db.close();
+  }
+}
+
+export function readPreparedAnswerSets(limit = 20): PreparedAnswerSetRow[] {
+  const db = openDb();
+  try {
+    return db
+      .prepare(
+        `
+        SELECT
+          p.id,
+          p.jobPostingId,
+          p.createdAt,
+          p.questionsJson,
+          p.answersJson,
+          j.url AS jobUrl,
+          j.title,
+          j.company
+        FROM PreparedAnswerSet p
+        LEFT JOIN JobPosting j ON j.id = p.jobPostingId
+        ORDER BY p.createdAt DESC
+        LIMIT ?
+        `,
+      )
+      .all(limit) as PreparedAnswerSetRow[];
+  } finally {
+    db.close();
+  }
+}
+
+export function readAnswerCache(limit = 30): AnswerCacheRow[] {
+  const db = openDb();
+  try {
+    return db
+      .prepare(
+        `
+        SELECT
+          id,
+          normalizedQuestion,
+          label,
+          questionType,
+          strategy,
+          answerJson,
+          confidenceLabel,
+          source,
+          notesJson,
+          createdAt,
+          updatedAt
+        FROM AnswerCacheEntry
+        ORDER BY updatedAt DESC
+        LIMIT ?
+        `,
+      )
+      .all(limit) as AnswerCacheRow[];
+  } finally {
+    db.close();
+  }
+}
+
+export function readRecentDecisions(args?: {
+  limit?: number;
+  decisionId?: string;
+  company?: string;
+  jobUrl?: string;
+}): DecisionRow[] {
+  const db = openDb();
+  try {
+    const limit = args?.limit ?? 40;
+    const whereClauses: string[] = [];
+    const params: Array<string | number> = [];
+
+    if (args?.decisionId) {
+      whereClauses.push("d.id = ?");
+      params.push(args.decisionId);
+    }
+
+    if (args?.company) {
+      whereClauses.push("j.company = ?");
+      params.push(args.company);
+    }
+
+    if (args?.jobUrl) {
+      whereClauses.push("j.url = ?");
+      params.push(args.jobUrl);
+    }
+
+    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+
+    return db
+      .prepare(
+        `
+        SELECT
+          d.id,
+          d.decision,
+          d.score,
+          d.policyAllowed,
+          d.reasons,
+          d.createdAt,
+          d.jobPostingId,
+          j.url AS jobUrl,
+          j.title,
+          j.company,
+          j.companyLogoUrl,
+          j.companyLinkedinUrl,
+          j.location
+        FROM ApplicationDecision d
+        INNER JOIN JobPosting j ON j.id = d.jobPostingId
+        ${whereSql}
+        ORDER BY d.createdAt DESC
+        LIMIT ?
+        `,
+      )
+      .all(...params, limit) as DecisionRow[];
   } finally {
     db.close();
   }

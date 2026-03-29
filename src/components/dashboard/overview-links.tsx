@@ -1,6 +1,6 @@
 import type { Route } from "next";
 import Link from "next/link";
-import { ArrowRight, Archive, Building2, History } from "lucide-react";
+import { ArrowRight, Archive, Building2, ClipboardList, History, MessagesSquare } from "lucide-react";
 import { Card } from "@/components/ui";
 
 const sections = [
@@ -9,6 +9,18 @@ const sections = [
     title: "Review History",
     description: "Inspect recent decisions, scores, thresholds, and skip/apply reasons.",
     icon: History,
+  },
+  {
+    href: "/decisions" as Route,
+    title: "Decisions",
+    description: "Inspect detailed decision records, score snapshots, policy results, and linked company/job context.",
+    icon: ClipboardList,
+  },
+  {
+    href: "/answers" as Route,
+    title: "Answers",
+    description: "Inspect generated Easy Apply survey answers and reusable cached answer memory.",
+    icon: MessagesSquare,
   },
   {
     href: "/artifacts" as Route,
@@ -26,7 +38,7 @@ const sections = [
 
 export function OverviewLinks() {
   return (
-    <section className="grid gap-4 lg:grid-cols-3">
+    <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
       {sections.map((section) => {
         const Icon = section.icon;
 
