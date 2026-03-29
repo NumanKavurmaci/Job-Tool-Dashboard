@@ -12,13 +12,13 @@ describe("ReviewsSection", () => {
             jobUrl: "https://www.linkedin.com/jobs/view/1",
             platform: "linkedin",
             source: "easy-apply-dry-run",
-            status: "SKIPPED",
+            status: "SKIPPED_DUE_TO_EASY_APPLY_RUN",
             score: 52,
             threshold: 60,
-            decision: "SKIP",
+            decision: "APPLY",
             policyAllowed: 1,
             reasons: "[]",
-            summary: "Score below threshold.",
+            summary: "This LinkedIn job redirects to an external application page.",
             createdAt: "2026-03-29T12:00:00.000Z",
             title: "System Engineer",
             company: "Ticimax",
@@ -33,6 +33,8 @@ describe("ReviewsSection", () => {
     expect(html).toContain('href="https://www.linkedin.com/jobs/view/1"');
     expect(html).toContain("https://www.linkedin.com/company/ticimax/life/");
     expect(html).toContain("Ticimax");
+    expect(html).toContain("SKIPPED_DUE_TO_EASY_APPLY_RUN");
+    expect(html).toContain("APPLY");
     expect(html).not.toContain(">https://www.linkedin.com/jobs/view/1<");
     expect(html).toContain("/decisions?company=Ticimax&amp;jobUrl=https%3A%2F%2Fwww.linkedin.com%2Fjobs%2Fview%2F1");
   });

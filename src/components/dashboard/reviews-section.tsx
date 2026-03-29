@@ -72,9 +72,24 @@ export function ReviewsSection({ reviews }: Pick<DashboardData, "reviews">) {
                   </div>
                 </td>
                 <td className="py-4 pr-4">
-                  <Badge tone={review.decision === "APPLY" ? "apply" : "skip"}>
-                    {review.decision ?? review.status}
-                  </Badge>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge tone={review.decision === "APPLY" ? "apply" : "skip"}>
+                      {review.decision ?? review.status}
+                    </Badge>
+                    <Badge
+                      tone={
+                        review.status === "SKIPPED_DUE_TO_EASY_APPLY_RUN"
+                          ? "warn"
+                          : review.status === "SUBMITTED"
+                            ? "apply"
+                            : review.status === "READY_TO_SUBMIT"
+                              ? "info"
+                              : "neutral"
+                      }
+                    >
+                      {review.status}
+                    </Badge>
+                  </div>
                 </td>
                 <td className="py-4 pr-4 text-slate-200">
                   {review.score ?? "n/a"}
