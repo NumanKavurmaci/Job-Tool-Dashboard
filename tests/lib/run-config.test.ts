@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRunArgs } from "@/lib/run-config";
+import { buildGeneratedRunScript, buildRunArgs } from "@/lib/run-config";
 
 describe("run config", () => {
   it("builds dry-run batch args with optional AI score adjustment", () => {
@@ -43,5 +43,29 @@ describe("run config", () => {
         resumePath: "./user/resume.pdf",
       }),
     ).toThrow("Questions path is required.");
+  });
+
+  it("builds a PowerShell wrapper with properly quoted JavaScript string args", () => {
+    const script = buildGeneratedRunScript([
+      "easy-apply-batch",
+      "https://www.linkedin.com/jobs/collections/top-applicant",
+      "100",
+      "--score-threshold",
+      "40",
+      "--ai-score-adjustment",
+    ]);
+
+    expect(script).toContain("await main(['easy-apply-batch', 'https://www.linkedin.com/jobs/collections/top-applicant', '100', '--score-threshold', '40', '--ai-score-adjustment'], appDeps);");
+    expect(script).not.toContain("await main([easy-apply-batch");
+  });
+
+  it("escapes single quotes and backslashes inside generated args", () => {
+    const script = buildGeneratedRunScript([
+      "build-profile",
+      "--resume",
+      "C:\\Users\\numan\\O'Reilly\\resume.pdf",
+    ]);
+
+    expect(script).toContain("'C:\\\\Users\\\\numan\\\\O\\'Reilly\\\\resume.pdf'");
   });
 });

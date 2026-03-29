@@ -5,6 +5,7 @@ import { Badge, Card, SectionTitle } from "@/components/ui";
 import {
   RUN_SCRIPT_DEFINITIONS,
   buildRunArgs,
+  buildGeneratedRunScript,
   getRunScriptDefinition,
   type RunFieldDefinition,
   type RunFormValues,
@@ -63,25 +64,6 @@ function FieldInput({
   );
 }
 
-function formatArgsInline(args: string[]) {
-  return args.map((arg) => (arg.includes(" ") ? `"${arg}"` : arg)).join(", ");
-}
-
-function buildGeneratedScript(args: string[]) {
-  return `$env:LLM_PROVIDER='local'
-$env:LOCAL_LLM_BASE_URL='http://127.0.0.1:1234/v1'
-$env:LOCAL_LLM_MODEL='openai/gpt-oss-20b'
-@'
-import { main, appDeps } from "./src/index.ts";
-try {
-  const result = await main([${formatArgsInline(args)}], appDeps);
-  console.log(JSON.stringify(result, null, 2));
-} finally {
-  await appDeps.prisma.$disconnect();
-}
-'@ | npx tsx -`;
-}
-
 export function RunScriptBuilder() {
   const [scriptType, setScriptType] = useState<RunScriptType>("easy-apply-dry-run");
   const [values, setValues] = useState<RunFormValues>(() => buildInitialValues("easy-apply-dry-run"));
@@ -94,7 +76,7 @@ export function RunScriptBuilder() {
       const args = buildRunArgs(scriptType, values);
       return {
         preview: args.join(" "),
-        script: buildGeneratedScript(args),
+        script: buildGeneratedRunScript(args),
         error: null,
       };
     } catch (error) {
