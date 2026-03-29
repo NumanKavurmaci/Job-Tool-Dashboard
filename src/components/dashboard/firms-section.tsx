@@ -48,6 +48,18 @@ export function FirmsSection({ firms }: Pick<DashboardData, "firms">) {
                       <p className="text-xs text-muted">
                         Updated {new Date(firm.updatedAt).toLocaleString()}
                       </p>
+                      {firm.linkedinUrl ? (
+                        <a
+                          href={firm.linkedinUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 inline-flex text-xs text-info hover:text-blue-300"
+                        >
+                          LinkedIn company page
+                        </a>
+                      ) : (
+                        <p className="mt-1 text-xs text-muted">LinkedIn company page not captured yet.</p>
+                      )}
                     </div>
                     <Badge tone="info">{firm.totalReviewedJobs} reviewed</Badge>
                   </div>

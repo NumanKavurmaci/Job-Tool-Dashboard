@@ -14,6 +14,7 @@ export type FirmRow = {
   id: string;
   name: string;
   logoUrl: string | null;
+  linkedinUrl: string | null;
   totalReviewedJobs: number;
   appliedJobs: number;
   skippedJobs: number;
@@ -145,6 +146,7 @@ export function readRecentFirms(limit = 12): FirmRow[] {
           id,
           name,
           logoUrl,
+          linkedinUrl,
           totalReviewedJobs,
           appliedJobs,
           skippedJobs,

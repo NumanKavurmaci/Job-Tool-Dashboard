@@ -11,7 +11,7 @@ export default function CompaniesPage() {
       <PageIntro
         eyebrow="Companies"
         title="Firm-level tracking gathered by the engine."
-        subtitle="See which companies have been reviewed, how many job offers were evaluated, and how many decisions ended in apply or skip."
+        subtitle="See which companies have been reviewed, how many job offers were evaluated, how decisions split between apply and skip, and whether the engine captured the company LinkedIn page."
       />
       <FirmsSection firms={data.firms} />
     </PageShell>
