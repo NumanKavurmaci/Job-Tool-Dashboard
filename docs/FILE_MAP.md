@@ -21,6 +21,8 @@
   - overview page; composes general summary sections only
 - [app/search/page.tsx](../app\search\page.tsx)
   - collection-wide search page with grouped result sections
+- [app/run/page.tsx](../app\run\page.tsx)
+  - script generator page with left-side options and right-side PowerShell output
 - [app/reviews/page.tsx](../app\reviews\page.tsx)
   - dedicated review history page
 - [app/decisions/page.tsx](../app\decisions\page.tsx)
@@ -48,6 +50,8 @@
   - quick links from overview into deeper pages
 - [src/components/dashboard/search-section.tsx](../src\components\dashboard\search-section.tsx)
   - grouped search results across dashboard collections
+- [src/components/dashboard/run-script-builder.tsx](../src\components\dashboard\run-script-builder.tsx)
+  - client-side script generator with dynamic options form and copyable PowerShell output
 - [src/components/dashboard/reviews-section.tsx](../src\components\dashboard\reviews-section.tsx)
   - review history table
 - [src/components/dashboard/decisions-section.tsx](../src\components\dashboard\decisions-section.tsx)
@@ -67,6 +71,8 @@
 
 - [lib/engine-paths.ts](../lib\engine-paths.ts)
   - resolves engine workspace paths from `ENGINE_ROOT`
+- [lib/run-config.ts](../lib\run-config.ts)
+  - shared script definitions and CLI arg construction logic for the script generator
 - [lib/engine-db.ts](../lib\engine-db.ts)
   - read-only SQLite queries into engine tables, including grouped search helpers
 - [lib/engine-artifacts.ts](../lib\engine-artifacts.ts)
@@ -84,6 +90,8 @@
   - validates dashboard data aggregation
 - [tests/lib/engine-db-search.test.ts](../tests\lib\engine-db-search.test.ts)
   - validates search guard behavior
+- [tests/lib/run-config.test.ts](../tests\lib\run-config.test.ts)
+  - validates runner arg construction and missing-field protection
 - [tests/components/answers-section.test.tsx](../tests\components\answers-section.test.tsx)
   - protects answer-page empty and populated renders
 - [tests/components/search-section.test.tsx](../tests\components\search-section.test.tsx)

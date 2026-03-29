@@ -1,9 +1,15 @@
 import type { Route } from "next";
 import Link from "next/link";
-import { ArrowRight, Archive, Building2, ClipboardList, History, MessagesSquare, Search } from "lucide-react";
+import { ArrowRight, Archive, Building2, ClipboardList, History, MessagesSquare, PlaySquare, Search } from "lucide-react";
 import { Card } from "@/components/ui";
 
 const sections = [
+  {
+    href: "/run" as Route,
+    title: "Run",
+    description: "Generate ready-to-paste PowerShell `tsx` scripts from structured dashboard options.",
+    icon: PlaySquare,
+  },
   {
     href: "/search" as Route,
     title: "Search",

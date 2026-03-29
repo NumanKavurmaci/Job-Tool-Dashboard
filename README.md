@@ -22,6 +22,8 @@ It currently reads:
 
 from the engine workspace configured by `ENGINE_ROOT`.
 
+It can also generate engine scripts from the dashboard via the new run page.
+
 ## Pages
 
 - `/`
@@ -32,6 +34,10 @@ from the engine workspace configured by `ENGINE_ROOT`.
 - `/search`
   - search across every major collection
   - grouped results under separate collection headings
+- `/run`
+  - generate ready-to-paste PowerShell `tsx` scripts
+  - configure script options from a left-side panel
+  - use the generated script manually in terminal when needed
 - `/reviews`
   - review history rows from `JobReviewHistory`
 - `/decisions`
@@ -80,6 +86,6 @@ AI-first file maps live in:
 
 ## Notes
 
-- The dashboard is read-only.
-- It is intended to stay separate from the engine repo to reduce coupling and keep UI concerns out
-  of the automation codebase.
+- Most pages are still read-focused, and `/run` now focuses on script generation rather than execution.
+- The dashboard is still kept separate from the engine repo to reduce coupling and keep UI concerns
+  out of the automation codebase.

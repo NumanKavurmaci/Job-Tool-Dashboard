@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui";
 
 const links = [
   { href: "/" as Route, label: "Overview" },
+  { href: "/run" as Route, label: "Run" },
   { href: "/search" as Route, label: "Search" },
   { href: "/reviews" as Route, label: "Review History" },
   { href: "/decisions" as Route, label: "Decisions" },
