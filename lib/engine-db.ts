@@ -10,6 +10,17 @@ export type DashboardStats = {
   avgScore: number | null;
 };
 
+export type FirmRow = {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+  totalReviewedJobs: number;
+  appliedJobs: number;
+  skippedJobs: number;
+  decisionIdsJson: string;
+  updatedAt: string;
+};
+
 export type ReviewRow = {
   id: string;
   jobUrl: string;
@@ -119,6 +130,32 @@ export function readRecentLogs(limit = 20): SystemLogRow[] {
         `,
       )
       .all(limit) as SystemLogRow[];
+  } finally {
+    db.close();
+  }
+}
+
+export function readRecentFirms(limit = 12): FirmRow[] {
+  const db = openDb();
+  try {
+    return db
+      .prepare(
+        `
+        SELECT
+          id,
+          name,
+          logoUrl,
+          totalReviewedJobs,
+          appliedJobs,
+          skippedJobs,
+          decisionIdsJson,
+          updatedAt
+        FROM Firm
+        ORDER BY totalReviewedJobs DESC, updatedAt DESC
+        LIMIT ?
+        `,
+      )
+      .all(limit) as FirmRow[];
   } finally {
     db.close();
   }

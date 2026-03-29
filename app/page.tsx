@@ -1,6 +1,8 @@
-import { DashboardHeader } from "@/components/dashboard/dashboard-header";
-import { ReviewsSection } from "@/components/dashboard/reviews-section";
-import { SidebarSections } from "@/components/dashboard/sidebar-sections";
+import { OverviewLinks } from "@/components/dashboard/overview-links";
+import { OverviewPanel } from "@/components/dashboard/overview-panel";
+import { PageIntro } from "@/components/dashboard/page-intro";
+import { PageShell } from "@/components/dashboard/page-shell";
+import { LogsSection } from "@/components/dashboard/logs-section";
 import { StatsOverview } from "@/components/dashboard/stats-overview";
 import { getDashboardData } from "@/lib/dashboard-data";
 
@@ -8,14 +10,16 @@ export default function HomePage() {
   const data = getDashboardData();
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-7xl flex-col gap-8 px-6 py-10 lg:px-10">
-      <DashboardHeader engineRoot={data.engineRoot} />
+    <PageShell>
+      <PageIntro
+        eyebrow="Overview"
+        title="A high-level readout of what the engine has already accomplished."
+        subtitle="Use this page for the broad picture, then jump into dedicated views for review history, generated artifacts, and company-level tracking."
+      />
       <StatsOverview stats={data.stats} />
-
-      <section className="grid gap-6 xl:grid-cols-[1.4fr_0.8fr]">
-        <ReviewsSection reviews={data.reviews} />
-        <SidebarSections artifacts={data.artifacts} logs={data.logs} />
-      </section>
-    </main>
+      <OverviewPanel engineRoot={data.engineRoot} stats={data.stats} />
+      <OverviewLinks />
+      <LogsSection logs={data.logs} />
+    </PageShell>
   );
 }
