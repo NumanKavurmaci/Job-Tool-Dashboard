@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  @apply bg-ink bg-halo text-text antialiased;
+}
+
+a {
+  @apply text-info transition-colors hover:text-blue-300;
+}
+
+::selection {
+  @apply bg-blue-400/25;
+}
