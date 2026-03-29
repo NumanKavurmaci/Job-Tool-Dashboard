@@ -62,4 +62,41 @@ describe("DecisionsSection", () => {
 
     expect(html).toContain("No decisions matched the selected filters yet.");
   });
+
+  it("renders safe fallbacks when normalized payloads and links are missing", () => {
+    const html = renderToStaticMarkup(
+      <DecisionsSection
+        decisions={[
+          {
+            id: "decision-2",
+            decision: "APPLY",
+            score: 88,
+            threshold: null,
+            policyAllowed: 1,
+            reasons: "Single string reason",
+            createdAt: "2026-03-29T12:30:00.000Z",
+            jobPostingId: "job-2",
+            jobUrl: "https://www.linkedin.com/jobs/view/2",
+            title: null,
+            company: null,
+            companyLogoUrl: null,
+            companyLinkedinUrl: null,
+            location: null,
+            normalizedJson: "{bad json}",
+          },
+        ]}
+      />,
+    );
+
+    expect(html).toContain("Unknown title");
+    expect(html).toContain("Unknown company");
+    expect(html).toContain("High-confidence fit based on the captured signals.");
+    expect(html).toContain("No threshold captured");
+    expect(html).toContain("Policy pass");
+    expect(html).toContain("Normalized job signals were not captured for this decision.");
+    expect(html).toContain("No technologies captured.");
+    expect(html).toContain("No must-have skills captured.");
+    expect(html).toContain("No nice-to-have skills captured.");
+    expect(html).toContain("Single string reason");
+  });
 });

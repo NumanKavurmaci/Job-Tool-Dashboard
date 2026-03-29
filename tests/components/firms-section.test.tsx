@@ -53,4 +53,29 @@ describe("FirmsSection", () => {
     expect(html).toContain("LinkedIn company page not captured yet.");
     expect(html).toContain("No decisions linked yet.");
   });
+
+  it("falls back safely when decision ids are invalid JSON", () => {
+    const html = renderToStaticMarkup(
+      <FirmsSection
+        firms={[
+          {
+            id: "firm-3",
+            name: "Broken JSON Inc",
+            logoUrl: null,
+            linkedinUrl: null,
+            totalReviewedJobs: 2,
+            appliedJobs: 1,
+            skippedJobs: 1,
+            decisionIdsJson: "{bad json}",
+            updatedAt: "2026-03-29T12:00:00.000Z",
+          },
+        ]}
+      />,
+    );
+
+    expect(html).toContain("Broken JSON Inc");
+    expect(html).toContain("B");
+    expect(html).toContain("/decisions?company=Broken+JSON+Inc");
+    expect(html).toContain("No decisions linked yet.");
+  });
 });

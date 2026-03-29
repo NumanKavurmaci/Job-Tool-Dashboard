@@ -3,15 +3,15 @@
 <html lang="en">
 
 <head>
-    <title>Code coverage report for lib/dashboard-data.ts</title>
+    <title>Code coverage report for src/components/dashboard/dashboard-nav.tsx</title>
     <meta charset="utf-8" />
-    <link rel="stylesheet" href="../prettify.css" />
-    <link rel="stylesheet" href="../base.css" />
-    <link rel="shortcut icon" type="image/x-icon" href="../favicon.png" />
+    <link rel="stylesheet" href="../../../prettify.css" />
+    <link rel="stylesheet" href="../../../base.css" />
+    <link rel="shortcut icon" type="image/x-icon" href="../../../favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style type='text/css'>
         .coverage-summary .sorter {
-            background-image: url(../sort-arrow-sprite.png);
+            background-image: url(../../../sort-arrow-sprite.png);
         }
     </style>
 </head>
@@ -19,13 +19,13 @@
 <body>
 <div class='wrapper'>
     <div class='pad1'>
-        <h1><a href="../index.html">All files</a> / <a href="index.html">lib</a> dashboard-data.ts</h1>
+        <h1><a href="../../../index.html">All files</a> / <a href="index.html">src/components/dashboard</a> dashboard-nav.tsx</h1>
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>1/1</span>
+                <span class='fraction'>3/3</span>
             </div>
         
             
@@ -39,14 +39,14 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>1/1</span>
+                <span class='fraction'>2/2</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>1/1</span>
+                <span class='fraction'>3/3</span>
             </div>
         
             
@@ -90,8 +90,22 @@
 <a name='L25'></a><a href='#L25'>25</a>
 <a name='L26'></a><a href='#L26'>26</a>
 <a name='L27'></a><a href='#L27'>27</a>
-<a name='L28'></a><a href='#L28'>28</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L28'></a><a href='#L28'>28</a>
+<a name='L29'></a><a href='#L29'>29</a>
+<a name='L30'></a><a href='#L30'>30</a>
+<a name='L31'></a><a href='#L31'>31</a>
+<a name='L32'></a><a href='#L32'>32</a>
+<a name='L33'></a><a href='#L33'>33</a>
+<a name='L34'></a><a href='#L34'>34</a>
+<a name='L35'></a><a href='#L35'>35</a>
+<a name='L36'></a><a href='#L36'>36</a>
+<a name='L37'></a><a href='#L37'>37</a>
+<a name='L38'></a><a href='#L38'>38</a>
+<a name='L39'></a><a href='#L39'>39</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -116,34 +130,53 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">8x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { readRecentArtifacts } from "./engine-artifacts";
-import {
-  readAnswerCache,
-  readDashboardStats,
-  readPreparedAnswerSets,
-  readRecentDecisions,
-  readRecentFirms,
-  readRecentLogs,
-  readRecentReviews,
-} from "./engine-db";
-import { getEngineRoot } from "./engine-paths";
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import type { Route } from "next";
+import Link from "next/link";
+import { Badge } from "@/components/ui";
 &nbsp;
-export function getDashboardData() {
-  return {
-    engineRoot: getEngineRoot(),
-    stats: readDashboardStats(),
-    firms: readRecentFirms(),
-    decisions: readRecentDecisions(),
-    preparedAnswerSets: readPreparedAnswerSets(),
-    answerCache: readAnswerCache(),
-    reviews: readRecentReviews(),
-    logs: readRecentLogs(),
-    artifacts: readRecentArtifacts(),
-  };
+const links = [
+  { href: "/" as Route, label: "Overview" },
+  { href: "/run" as Route, label: "Run" },
+  { href: "/search" as Route, label: "Search" },
+  { href: "/reviews" as Route, label: "Review History" },
+  { href: "/decisions" as Route, label: "Decisions" },
+  { href: "/answers" as Route, label: "Answers" },
+  { href: "/artifacts" as Route, label: "Artifacts" },
+  { href: "/companies" as Route, label: "Companies" },
+];
+&nbsp;
+export function DashboardNav() {
+  return (
+    &lt;nav className="sticky top-0 z-20 border-b border-line bg-ink/85 backdrop-blur"&gt;
+      &lt;div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-4 lg:px-10"&gt;
+        &lt;div className="space-y-1"&gt;
+          &lt;Link href="/" className="inline-block"&gt;
+            &lt;p className="text-xs font-semibold uppercase tracking-[0.3em] text-info transition hover:text-blue-300"&gt;
+              Job Tool Dashboard
+            &lt;/p&gt;
+          &lt;/Link&gt;
+          &lt;p className="text-sm text-muted"&gt;Read-only visibility over the engine workspace.&lt;/p&gt;
+        &lt;/div&gt;
+        &lt;div className="flex flex-wrap items-center gap-2"&gt;
+          {links.map((link) =&gt; (
+            &lt;Link key={link.href} href={link.href}&gt;
+              &lt;Badge tone="neutral"&gt;{link.label}&lt;/Badge&gt;
+            &lt;/Link&gt;
+          ))}
+        &lt;/div&gt;
+      &lt;/div&gt;
+    &lt;/nav&gt;
+  );
 }
-&nbsp;
-export type DashboardData = ReturnType&lt;typeof getDashboardData&gt;;
 &nbsp;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
@@ -153,14 +186,14 @@ export type DashboardData = ReturnType&lt;typeof getDashboardData&gt;;
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
                 at 2026-03-29T18:10:23.428Z
             </div>
-        <script src="../prettify.js"></script>
+        <script src="../../../prettify.js"></script>
         <script>
             window.onload = function () {
                 prettyPrint();
             };
         </script>
-        <script src="../sorter.js"></script>
-        <script src="../block-navigation.js"></script>
+        <script src="../../../sorter.js"></script>
+        <script src="../../../block-navigation.js"></script>
     </body>
 </html>
     

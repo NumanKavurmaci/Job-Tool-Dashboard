@@ -54,4 +54,44 @@ describe("AnswersSection", () => {
     expect(html).toContain("deterministic");
     expect(html).toContain("No");
   });
+
+  it("handles invalid payload JSON and falls back to safe empty states", () => {
+    const html = renderToStaticMarkup(
+      <AnswersSection
+        preparedAnswerSets={[
+          {
+            id: "prepared-2",
+            jobPostingId: null,
+            createdAt: "2026-03-29T10:00:00.000Z",
+            questionsJson: "not-json",
+            answersJson: "not-json",
+            jobUrl: null,
+            title: null,
+            company: null,
+          },
+        ]}
+        answerCache={[
+          {
+            id: "cache-2",
+            normalizedQuestion: "custom payload",
+            label: "Custom payload",
+            questionType: "unknown",
+            strategy: "generated",
+            answerJson: "\"raw-string-answer\"",
+            confidenceLabel: "medium",
+            source: "llm",
+            notesJson: null,
+            createdAt: "2026-03-29T10:00:00.000Z",
+            updatedAt: "2026-03-29T10:00:00.000Z",
+          },
+        ]}
+      />,
+    );
+
+    expect(html).toContain("Unknown title");
+    expect(html).toContain("Unknown company");
+    expect(html).toContain("No question payload captured.");
+    expect(html).toContain("No answer payload captured.");
+    expect(html).toContain("raw-string-answer");
+  });
 });

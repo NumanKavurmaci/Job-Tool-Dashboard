@@ -116,4 +116,31 @@ describe("OverviewAnalytics", () => {
     expect(html).toContain("2026-03-29T12-00-00-easy-apply-batch.json");
     expect(html).toContain("There are 1 recent error-level system logs worth checking");
   });
+
+  it("renders empty-state narrative when there is no operational data", () => {
+    const html = renderToStaticMarkup(
+      <OverviewAnalytics
+        stats={{
+          totalJobs: 0,
+          totalReviews: 0,
+          totalLogs: 0,
+          applyCount: 0,
+          skipCount: 0,
+          avgScore: null,
+        }}
+        reviews={[]}
+        firms={[]}
+        logs={[]}
+        artifacts={[]}
+      />,
+    );
+
+    expect(html).toContain("0%");
+    expect(html).toContain("n/a");
+    expect(html).toContain("No review-source breakdown has been captured yet.");
+    expect(html).toContain("No company data yet");
+    expect(html).toContain("No artifacts captured yet");
+    expect(html).toContain("No recent error-level logs were captured in the current snapshot.");
+    expect(html).toContain("Company-level aggregation will show up here once the engine has persisted firm snapshots.");
+  });
 });

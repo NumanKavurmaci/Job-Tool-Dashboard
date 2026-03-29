@@ -90,6 +90,8 @@
   - validates dashboard data aggregation
 - [tests/lib/engine-db-search.test.ts](../tests\lib\engine-db-search.test.ts)
   - validates search guard behavior
+- [tests/lib/engine-db.test.ts](../tests\lib\engine-db.test.ts)
+  - validates read-only SQLite readers and cross-collection search shaping with mocked DB responses
 - [tests/lib/run-config.test.ts](../tests\lib\run-config.test.ts)
   - validates runner arg construction and missing-field protection
 - [tests/components/answers-section.test.tsx](../tests\components\answers-section.test.tsx)
