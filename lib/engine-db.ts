@@ -45,6 +45,7 @@ export type DecisionRow = {
   id: string;
   decision: string;
   score: number;
+  threshold: number | null;
   policyAllowed: number;
   reasons: string;
   createdAt: string;
@@ -55,6 +56,7 @@ export type DecisionRow = {
   companyLogoUrl: string | null;
   companyLinkedinUrl: string | null;
   location: string | null;
+  normalizedJson: string | null;
 };
 
 export type SystemLogRow = {
@@ -298,6 +300,15 @@ export function readRecentDecisions(args?: {
           d.id,
           d.decision,
           d.score,
+          (
+            SELECT h.threshold
+            FROM JobReviewHistory h
+            WHERE h.jobPostingId = d.jobPostingId
+              AND h.decision = d.decision
+              AND h.threshold IS NOT NULL
+            ORDER BY h.createdAt DESC
+            LIMIT 1
+          ) AS threshold,
           d.policyAllowed,
           d.reasons,
           d.createdAt,
@@ -307,7 +318,8 @@ export function readRecentDecisions(args?: {
           j.company,
           j.companyLogoUrl,
           j.companyLinkedinUrl,
-          j.location
+          j.location,
+          j.normalizedJson
         FROM ApplicationDecision d
         INNER JOIN JobPosting j ON j.id = d.jobPostingId
         ${whereSql}
