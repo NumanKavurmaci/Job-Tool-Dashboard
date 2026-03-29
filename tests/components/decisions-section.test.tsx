@@ -38,6 +38,7 @@ describe("DecisionsSection", () => {
     );
 
     expect(html).toContain("System Engineer");
+    expect(html).toContain('href="https://www.linkedin.com/jobs/view/1"');
     expect(html).toContain("Ticimax");
     expect(html).toContain("Istanbul, Türkiye");
     expect(html).toContain("Policy blocked");

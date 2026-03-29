@@ -29,6 +29,9 @@ from the engine workspace configured by `ENGINE_ROOT`.
   - stats
   - engine workspace summary
   - quick links into the deeper views
+- `/search`
+  - search across every major collection
+  - grouped results under separate collection headings
 - `/reviews`
   - review history rows from `JobReviewHistory`
 - `/decisions`

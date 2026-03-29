@@ -1,9 +1,15 @@
 import type { Route } from "next";
 import Link from "next/link";
-import { ArrowRight, Archive, Building2, ClipboardList, History, MessagesSquare } from "lucide-react";
+import { ArrowRight, Archive, Building2, ClipboardList, History, MessagesSquare, Search } from "lucide-react";
 import { Card } from "@/components/ui";
 
 const sections = [
+  {
+    href: "/search" as Route,
+    title: "Search",
+    description: "Search every collection separately and inspect grouped results under dedicated sub-headings.",
+    icon: Search,
+  },
   {
     href: "/reviews" as Route,
     title: "Review History",
@@ -38,7 +44,7 @@ const sections = [
 
 export function OverviewLinks() {
   return (
-    <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+    <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
       {sections.map((section) => {
         const Icon = section.icon;
 

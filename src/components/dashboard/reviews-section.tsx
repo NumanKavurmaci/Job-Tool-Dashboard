@@ -38,7 +38,14 @@ export function ReviewsSection({ reviews }: Pick<DashboardData, "reviews">) {
               <tr key={review.id} className="align-top">
                 <td className="py-4 pr-4">
                   <div className="space-y-1">
-                    <p className="font-medium text-text">{review.title ?? "Unknown title"}</p>
+                    <a
+                      href={review.jobUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block font-medium text-text transition hover:text-blue-300 hover:underline"
+                    >
+                      {review.title ?? "Unknown title"}
+                    </a>
                     {review.companyLinkedinUrl ? (
                       <a
                         href={review.companyLinkedinUrl}
@@ -49,11 +56,10 @@ export function ReviewsSection({ reviews }: Pick<DashboardData, "reviews">) {
                         {review.company ?? "Unknown company"}
                       </a>
                     ) : (
-                      <p className="text-muted">{review.company ?? "Unknown company"}</p>
+                      <p className="text-muted">
+                        {review.company ?? "Unknown company"}
+                      </p>
                     )}
-                    <a href={review.jobUrl} className="font-mono text-xs text-info">
-                      {review.jobUrl}
-                    </a>
                     <a
                       href={buildDecisionHref({
                         ...(review.company ? { company: review.company } : {}),
@@ -73,11 +79,15 @@ export function ReviewsSection({ reviews }: Pick<DashboardData, "reviews">) {
                 <td className="py-4 pr-4 text-slate-200">
                   {review.score ?? "n/a"}
                   {review.threshold != null ? (
-                    <span className="block text-xs text-muted">threshold {review.threshold}</span>
+                    <span className="block text-xs text-muted">
+                      threshold {review.threshold}
+                    </span>
                   ) : null}
                 </td>
                 <td className="py-4 pr-4 text-muted">{review.source}</td>
-                <td className="py-4 text-muted">{review.summary ?? review.reasons}</td>
+                <td className="py-4 text-muted">
+                  {review.summary ?? review.reasons}
+                </td>
               </tr>
             ))}
           </tbody>

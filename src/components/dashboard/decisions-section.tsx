@@ -155,7 +155,14 @@ export function DecisionsSection({
                     </div>
                     <div className="min-w-0">
                       <p className="text-base font-semibold text-text">
-                        {decision.title ?? "Unknown title"}
+                        <a
+                          href={decision.jobUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="transition hover:text-blue-300 hover:underline"
+                        >
+                          {decision.title ?? "Unknown title"}
+                        </a>
                       </p>
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
                         <span>{decision.company ?? "Unknown company"}</span>

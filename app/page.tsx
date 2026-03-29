@@ -1,4 +1,5 @@
 import { OverviewLinks } from "@/components/dashboard/overview-links";
+import { OverviewAnalytics } from "@/components/dashboard/overview-analytics";
 import { OverviewPanel } from "@/components/dashboard/overview-panel";
 import { PageIntro } from "@/components/dashboard/page-intro";
 import { PageShell } from "@/components/dashboard/page-shell";
@@ -19,6 +20,13 @@ export default function HomePage() {
         subtitle="Use this page for the broad picture, then jump into dedicated views for review history, generated artifacts, and company-level tracking."
       />
       <StatsOverview stats={data.stats} />
+      <OverviewAnalytics
+        stats={data.stats}
+        reviews={data.reviews}
+        firms={data.firms}
+        logs={data.logs}
+        artifacts={data.artifacts}
+      />
       <OverviewPanel engineRoot={data.engineRoot} stats={data.stats} />
       <OverviewLinks />
       <LogsSection logs={data.logs} />

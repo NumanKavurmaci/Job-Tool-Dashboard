@@ -19,6 +19,8 @@
   - shared page frame and metadata
 - [app/page.tsx](../app\page.tsx)
   - overview page; composes general summary sections only
+- [app/search/page.tsx](../app\search\page.tsx)
+  - collection-wide search page with grouped result sections
 - [app/reviews/page.tsx](../app\reviews\page.tsx)
   - dedicated review history page
 - [app/decisions/page.tsx](../app\decisions\page.tsx)
@@ -44,6 +46,8 @@
   - engine-root and summary context
 - [src/components/dashboard/overview-links.tsx](../src\components\dashboard\overview-links.tsx)
   - quick links from overview into deeper pages
+- [src/components/dashboard/search-section.tsx](../src\components\dashboard\search-section.tsx)
+  - grouped search results across dashboard collections
 - [src/components/dashboard/reviews-section.tsx](../src\components\dashboard\reviews-section.tsx)
   - review history table
 - [src/components/dashboard/decisions-section.tsx](../src\components\dashboard\decisions-section.tsx)
@@ -64,7 +68,7 @@
 - [lib/engine-paths.ts](../lib\engine-paths.ts)
   - resolves engine workspace paths from `ENGINE_ROOT`
 - [lib/engine-db.ts](../lib\engine-db.ts)
-  - read-only SQLite queries into engine tables
+  - read-only SQLite queries into engine tables, including grouped search helpers
 - [lib/engine-artifacts.ts](../lib\engine-artifacts.ts)
   - file-system reads for recent artifacts and previews
 - [lib/dashboard-data.ts](../lib\dashboard-data.ts)
@@ -78,8 +82,12 @@
   - validates artifact discovery and preview behavior
 - [tests/lib/dashboard-data.test.ts](../tests\lib\dashboard-data.test.ts)
   - validates dashboard data aggregation
+- [tests/lib/engine-db-search.test.ts](../tests\lib\engine-db-search.test.ts)
+  - validates search guard behavior
 - [tests/components/answers-section.test.tsx](../tests\components\answers-section.test.tsx)
   - protects answer-page empty and populated renders
+- [tests/components/search-section.test.tsx](../tests\components\search-section.test.tsx)
+  - protects grouped search rendering and empty-query guidance
 - [tests/components/firms-section.test.tsx](../tests\components\firms-section.test.tsx)
   - protects firm cards, LinkedIn URL display, and decision links
 - [tests/components/decisions-section.test.tsx](../tests\components\decisions-section.test.tsx)

@@ -30,8 +30,10 @@ describe("ReviewsSection", () => {
     );
 
     expect(html).toContain("System Engineer");
+    expect(html).toContain('href="https://www.linkedin.com/jobs/view/1"');
     expect(html).toContain("https://www.linkedin.com/company/ticimax/life/");
     expect(html).toContain("Ticimax");
+    expect(html).not.toContain(">https://www.linkedin.com/jobs/view/1<");
     expect(html).toContain("/decisions?company=Ticimax&amp;jobUrl=https%3A%2F%2Fwww.linkedin.com%2Fjobs%2Fview%2F1");
   });
 

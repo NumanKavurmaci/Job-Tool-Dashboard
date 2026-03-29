@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui";
 
 const links = [
   { href: "/" as Route, label: "Overview" },
+  { href: "/search" as Route, label: "Search" },
   { href: "/reviews" as Route, label: "Review History" },
   { href: "/decisions" as Route, label: "Decisions" },
   { href: "/answers" as Route, label: "Answers" },
@@ -16,9 +17,11 @@ export function DashboardNav() {
     <nav className="sticky top-0 z-20 border-b border-line bg-ink/85 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-4 lg:px-10">
         <div className="space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-info">
-            Job Tool Dashboard
-          </p>
+          <Link href="/" className="inline-block">
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-info transition hover:text-blue-300">
+              Job Tool Dashboard
+            </p>
+          </Link>
           <p className="text-sm text-muted">Read-only visibility over the engine workspace.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
