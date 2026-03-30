@@ -1,8 +1,9 @@
 export type RunScriptType =
   | "score"
   | "decide"
-  | "easy-apply-dry-run"
+  | "easy-apply"
   | "easy-apply-batch"
+  | "external-apply"
   | "build-profile"
   | "answer-questions";
 
@@ -31,43 +32,25 @@ export type RunFormValues = Record<string, string | number | boolean | undefined
 
 export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
   {
-    type: "easy-apply-dry-run",
-    label: "Easy Apply Dry Run",
-    description: "Review LinkedIn job collections or single jobs without submitting applications.",
+    type: "easy-apply",
+    label: "Easy Apply",
+    description: "Run the LinkedIn Easy Apply flow for a single job URL, optionally in dry-run mode.",
+    caution: "Leave Dry Run enabled unless you want the engine to reach the real submit path.",
     fields: [
       {
         key: "url",
-        label: "Target URL",
+        label: "Job URL",
         type: "text",
-        placeholder: "https://www.linkedin.com/jobs/collections/top-applicant",
+        placeholder: "https://www.linkedin.com/jobs/view/4387396184/",
         required: true,
-        defaultValue: "https://www.linkedin.com/jobs/collections/top-applicant",
+        defaultValue: "https://www.linkedin.com/jobs/view/4387396184/",
       },
       {
-        key: "count",
-        label: "Job Count",
-        type: "number",
-        defaultValue: 25,
-        min: 1,
-      },
-      {
-        key: "scoreThreshold",
-        label: "Score Threshold",
-        type: "number",
-        defaultValue: 40,
-        min: 1,
-      },
-      {
-        key: "disableAiEvaluation",
-        label: "Disable AI Evaluation",
+        key: "dryRun",
+        label: "Dry Run",
         type: "checkbox",
-        defaultValue: false,
-      },
-      {
-        key: "useAiScoreAdjustment",
-        label: "Use AI Score Adjustment",
-        type: "checkbox",
-        defaultValue: false,
+        defaultValue: true,
+        description: "Adds --dry-run so the flow stops before the final submit.",
       },
       {
         key: "resumePath",
@@ -80,8 +63,8 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
   {
     type: "easy-apply-batch",
     label: "Easy Apply Batch",
-    description: "Run the live Easy Apply batch flow from a LinkedIn collection.",
-    caution: "This mode can trigger real application flow steps in the engine.",
+    description: "Run the LinkedIn Easy Apply batch flow from a collection URL, with dry-run as a flag.",
+    caution: "Clearing Dry Run can trigger real application flow steps in the engine.",
     fields: [
       {
         key: "url",
@@ -116,6 +99,41 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
         label: "Use AI Score Adjustment",
         type: "checkbox",
         defaultValue: false,
+      },
+      {
+        key: "dryRun",
+        label: "Dry Run",
+        type: "checkbox",
+        defaultValue: true,
+        description: "Adds --dry-run while keeping the batch command shape unchanged.",
+      },
+      {
+        key: "resumePath",
+        label: "Resume Path",
+        type: "text",
+        placeholder: "./user/resume.pdf",
+      },
+    ],
+  },
+  {
+    type: "external-apply",
+    label: "External Apply",
+    description: "Run the external application helper flow for a non-LinkedIn application URL.",
+    caution: "Clearing Dry Run allows the engine to continue through the live external apply path.",
+    fields: [
+      {
+        key: "url",
+        label: "Application URL",
+        type: "text",
+        placeholder: "https://company.example/apply/software-engineer",
+        required: true,
+      },
+      {
+        key: "dryRun",
+        label: "Dry Run",
+        type: "checkbox",
+        defaultValue: true,
+        description: "Adds --dry-run so the script only rehearses the flow.",
       },
       {
         key: "resumePath",
@@ -255,7 +273,18 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
       }
       return args;
     }
-    case "easy-apply-dry-run":
+    case "easy-apply": {
+      const url = stringValue("url");
+      if (!url || typeof url !== "string") {
+        throw new Error("Job URL is required.");
+      }
+      args.push(url);
+      pushStringArg(args, "--resume", stringValue("resumePath"));
+      if (booleanValue("dryRun")) {
+        args.push("--dry-run");
+      }
+      return args;
+    }
     case "easy-apply-batch": {
       const url = stringValue("url");
       if (!url || typeof url !== "string") {
@@ -277,6 +306,23 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
 
       if (booleanValue("useAiScoreAdjustment")) {
         args.push("--ai-score-adjustment");
+      }
+
+      if (booleanValue("dryRun")) {
+        args.push("--dry-run");
+      }
+
+      return args;
+    }
+    case "external-apply": {
+      const url = stringValue("url");
+      if (!url || typeof url !== "string") {
+        throw new Error("Application URL is required.");
+      }
+      args.push(url);
+      pushStringArg(args, "--resume", stringValue("resumePath"));
+      if (booleanValue("dryRun")) {
+        args.push("--dry-run");
       }
 
       return args;

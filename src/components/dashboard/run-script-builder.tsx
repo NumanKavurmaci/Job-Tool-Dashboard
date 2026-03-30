@@ -65,8 +65,8 @@ function FieldInput({
 }
 
 export function RunScriptBuilder() {
-  const [scriptType, setScriptType] = useState<RunScriptType>("easy-apply-dry-run");
-  const [values, setValues] = useState<RunFormValues>(() => buildInitialValues("easy-apply-dry-run"));
+  const [scriptType, setScriptType] = useState<RunScriptType>("easy-apply-batch");
+  const [values, setValues] = useState<RunFormValues>(() => buildInitialValues("easy-apply-batch"));
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
 
   const definition = useMemo(() => getRunScriptDefinition(scriptType), [scriptType]);
@@ -109,7 +109,7 @@ export function RunScriptBuilder() {
         <SectionTitle
           eyebrow="Options"
           title="Configure a script"
-          subtitle="Pick a script type and set the same options you would normally pass on CLI. The dashboard will only generate the script for you."
+          subtitle="Pick a CLI command and fill the same flags you would pass in terminal. Dry Run is now configured as a flag inside the relevant flows."
         />
 
         <div className="grid gap-2">

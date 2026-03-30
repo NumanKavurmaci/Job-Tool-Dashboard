@@ -6,25 +6,19 @@ import {
 } from "@/lib/run-config";
 
 describe("run config", () => {
-  it("builds dry-run batch args with optional AI score adjustment", () => {
+  it("builds single easy-apply args with a dry-run flag", () => {
     expect(
-      buildRunArgs("easy-apply-dry-run", {
-        url: "https://www.linkedin.com/jobs/collections/top-applicant",
-        count: 100,
-        scoreThreshold: 40,
-        disableAiEvaluation: false,
-        useAiScoreAdjustment: true,
+      buildRunArgs("easy-apply", {
+        url: "https://www.linkedin.com/jobs/view/4387396184/",
+        dryRun: true,
         resumePath: "./user/resume.pdf",
       }),
     ).toEqual([
-      "easy-apply-dry-run",
-      "https://www.linkedin.com/jobs/collections/top-applicant",
-      "100",
-      "--score-threshold",
-      "40",
+      "easy-apply",
+      "https://www.linkedin.com/jobs/view/4387396184/",
       "--resume",
       "./user/resume.pdf",
-      "--ai-score-adjustment",
+      "--dry-run",
     ]);
   });
 
@@ -71,7 +65,7 @@ describe("run config", () => {
     ]);
   });
 
-  it("builds live batch args with disable-ai-evaluation", () => {
+  it("builds batch args with optional dry-run and AI controls", () => {
     expect(
       buildRunArgs("easy-apply-batch", {
         url: "https://www.linkedin.com/jobs/collections/easy-apply",
@@ -79,6 +73,7 @@ describe("run config", () => {
         scoreThreshold: 55,
         disableAiEvaluation: true,
         useAiScoreAdjustment: false,
+        dryRun: true,
       }),
     ).toEqual([
       "easy-apply-batch",
@@ -87,11 +82,30 @@ describe("run config", () => {
       "--score-threshold",
       "55",
       "--disable-ai-evaluation",
+      "--dry-run",
+    ]);
+  });
+
+  it("builds external-apply args with a dry-run flag", () => {
+    expect(
+      buildRunArgs("external-apply", {
+        url: "https://company.example/apply/software-engineer",
+        resumePath: "./user/resume.pdf",
+        dryRun: true,
+      }),
+    ).toEqual([
+      "external-apply",
+      "https://company.example/apply/software-engineer",
+      "--resume",
+      "./user/resume.pdf",
+      "--dry-run",
     ]);
   });
 
   it("throws when required values are missing", () => {
     expect(() => buildRunArgs("score", {})).toThrow("Job URL is required.");
+    expect(() => buildRunArgs("easy-apply", {})).toThrow("Job URL is required.");
+    expect(() => buildRunArgs("external-apply", {})).toThrow("Application URL is required.");
     expect(() => buildRunArgs("build-profile", {})).toThrow("Resume path is required.");
     expect(() =>
       buildRunArgs("answer-questions", {

@@ -3,18 +3,18 @@ import { describe, expect, it } from "vitest";
 import { RunScriptBuilder } from "@/src/components/dashboard/run-script-builder";
 
 describe("RunScriptBuilder", () => {
-  it("renders a quoted PowerShell wrapper for the default dry-run script", () => {
+  it("renders a quoted PowerShell wrapper for the default batch script with a dry-run flag", () => {
     const html = renderToStaticMarkup(<RunScriptBuilder />);
 
     expect(html).toContain("Generated PowerShell wrapper");
-    expect(html).toContain("await main([&#x27;easy-apply-dry-run&#x27;, &#x27;https://www.linkedin.com/jobs/collections/top-applicant&#x27;, &#x27;25&#x27;, &#x27;--score-threshold&#x27;, &#x27;40&#x27;], appDeps);");
+    expect(html).toContain("await main([&#x27;easy-apply-batch&#x27;, &#x27;https://www.linkedin.com/jobs/collections/easy-apply&#x27;, &#x27;10&#x27;, &#x27;--score-threshold&#x27;, &#x27;40&#x27;, &#x27;--dry-run&#x27;], appDeps);");
   });
 
   it("keeps command preview readable while the generated script stays executable", () => {
     const html = renderToStaticMarkup(<RunScriptBuilder />);
 
     expect(html).toContain("Command Preview");
-    expect(html).toContain("easy-apply-dry-run https://www.linkedin.com/jobs/collections/top-applicant 25 --score-threshold 40");
+    expect(html).toContain("easy-apply-batch https://www.linkedin.com/jobs/collections/easy-apply 10 --score-threshold 40 --dry-run");
     expect(html).toContain("Copy Script");
   });
 });
