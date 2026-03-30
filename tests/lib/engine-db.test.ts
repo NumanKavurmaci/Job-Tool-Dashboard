@@ -213,6 +213,9 @@ describe("engine-db", () => {
             company: "Acme",
             location: "Remote",
             createdAt: "2026-03-29T09:00:00.000Z",
+            score: 65,
+            status: "SUBMITTED",
+            decision: "APPLY",
           },
         ],
       },
@@ -224,6 +227,9 @@ describe("engine-db", () => {
             summary: "Policy blocked.",
             source: "easy-apply-dry-run",
             createdAt: "2026-03-29T09:30:00.000Z",
+            score: 22,
+            status: "SKIPPED",
+            decision: "SKIP",
             title: "Backend Engineer",
             company: "Acme",
           },
@@ -306,5 +312,210 @@ describe("engine-db", () => {
     expect(result[0]?.collection).toBe("logs");
     expect(result[0]?.secondaryLabel).toBe("Open overview");
     expect(result.find((item) => item.collection === "jobs")?.secondaryLabel).toBe("View related decisions");
+  });
+
+  it("queries only selected collections and keeps top-score sorting", async () => {
+    queueStatements([
+      {
+        all: [
+          {
+            id: "decision-1",
+            decision: "APPLY",
+            score: 91,
+            policyAllowed: 1,
+            createdAt: "2026-03-29T10:30:00.000Z",
+            jobUrl: "https://www.linkedin.com/jobs/view/1",
+            title: "Backend Engineer",
+            company: "Acme",
+          },
+        ],
+      },
+    ]);
+
+    const { searchCollections } = await import("@/lib/engine-db");
+    const result = searchCollections({
+      query: "acme",
+      collections: ["decisions"],
+      filters: ["applied"],
+      sort: "top-score",
+      limitPerCollection: 3,
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.collection).toBe("decisions");
+    expect(result[0]?.score).toBe(91);
+    expect(prepareMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("sorts combined search results by top score before recency", async () => {
+    queueStatements([
+      {
+        all: [
+        {
+          id: "job-1",
+          url: "https://www.linkedin.com/jobs/view/1",
+          title: "Engineer I",
+          company: "Acme",
+          location: "Remote",
+          createdAt: "2026-03-29T12:00:00.000Z",
+          score: 44,
+          status: "EVALUATED",
+          decision: "APPLY",
+        },
+        {
+          id: "job-2",
+          url: "https://www.linkedin.com/jobs/view/2",
+          title: "Engineer II",
+          company: "Beta",
+          location: "Hybrid",
+          createdAt: "2026-03-29T13:00:00.000Z",
+          score: 88,
+          status: "SUBMITTED",
+          decision: "APPLY",
+        },
+        ],
+      },
+    ]);
+
+    const { searchCollections } = await import("@/lib/engine-db");
+    const result = searchCollections({
+      query: "engineer",
+      collections: ["jobs"],
+      sort: "top-score",
+    });
+
+    expect(result.map((item) => item.id)).toEqual(["job-2", "job-1"]);
+  });
+
+  it("sorts combined search results by company name when company-az is selected", async () => {
+    queueStatements([
+      {
+        all: [
+        {
+          id: "job-1",
+          url: "https://www.linkedin.com/jobs/view/1",
+          title: "Platform Engineer",
+          company: "Zulu Labs",
+          location: "Remote",
+          createdAt: "2026-03-29T12:00:00.000Z",
+          score: 70,
+          status: "SUBMITTED",
+          decision: "APPLY",
+        },
+        {
+          id: "job-2",
+          url: "https://www.linkedin.com/jobs/view/2",
+          title: "Backend Engineer",
+          company: "Acme",
+          location: "Berlin",
+          createdAt: "2026-03-29T12:30:00.000Z",
+          score: 65,
+          status: "SKIPPED",
+          decision: "SKIP",
+        },
+        ],
+      },
+    ]);
+
+    const { searchCollections } = await import("@/lib/engine-db");
+    const result = searchCollections({
+      query: "engineer",
+      collections: ["jobs"],
+      sort: "company-az",
+    });
+
+    expect(result.map((item) => item.subtitle)).toEqual(["Acme", "Zulu Labs"]);
+  });
+
+  it("sorts combined search results oldest first when requested", async () => {
+    queueStatements([
+      {
+        all: [
+        {
+          id: "review-1",
+          jobUrl: "https://www.linkedin.com/jobs/view/1",
+          summary: "Older review",
+          source: "easy-apply-batch",
+          createdAt: "2026-03-28T08:00:00.000Z",
+          score: 12,
+          status: "SKIPPED",
+          decision: "SKIP",
+          title: "Engineer I",
+          company: "Acme",
+        },
+        {
+          id: "review-2",
+          jobUrl: "https://www.linkedin.com/jobs/view/2",
+          summary: "Newer review",
+          source: "easy-apply-batch",
+          createdAt: "2026-03-29T08:00:00.000Z",
+          score: 82,
+          status: "SUBMITTED",
+          decision: "APPLY",
+          title: "Engineer II",
+          company: "Beta",
+        },
+        ],
+      },
+    ]);
+
+    const { searchCollections } = await import("@/lib/engine-db");
+    const result = searchCollections({
+      query: "review",
+      collections: ["reviews"],
+      sort: "oldest",
+    });
+
+    expect(result.map((item) => item.id)).toEqual(["review-1", "review-2"]);
+  });
+
+  it("maps logs and decision rows into dashboard-facing badges and links", async () => {
+    queueStatements([
+      {
+        all: [
+        {
+          id: "decision-1",
+          decision: "SKIP",
+          score: 12,
+          policyAllowed: 0,
+          createdAt: "2026-03-29T10:30:00.000Z",
+          jobUrl: "https://www.linkedin.com/jobs/view/1",
+          title: "Backend Engineer",
+          company: "Acme",
+        },
+        ],
+      },
+      {
+        all: [
+        {
+          id: "log-1",
+          level: "ERROR",
+          scope: "linkedin.batch",
+          message: "Application submit failed",
+          runType: "easy-apply-batch",
+          jobUrl: "https://www.linkedin.com/jobs/view/1",
+          createdAt: "2026-03-29T12:00:00.000Z",
+        },
+        ],
+      },
+    ]);
+
+    const { searchCollections } = await import("@/lib/engine-db");
+    const result = searchCollections({
+      query: "apply",
+      collections: ["decisions", "logs"],
+      sort: "newest",
+    });
+
+    expect(result.find((item) => item.collection === "decisions")).toMatchObject({
+      secondaryLabel: "Open decision detail",
+      status: "policy-blocked",
+      decision: "SKIP",
+    });
+    expect(result.find((item) => item.collection === "logs")).toMatchObject({
+      secondaryLabel: "Open overview",
+      level: "ERROR",
+      status: "ERROR",
+    });
   });
 });

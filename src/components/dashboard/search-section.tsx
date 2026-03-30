@@ -1,5 +1,13 @@
 import { Badge, Card, SectionTitle } from "@/components/ui";
-import type { SearchResultRow } from "@/lib/engine-db";
+import {
+  SEARCH_COLLECTION_OPTIONS,
+  SEARCH_FILTER_OPTIONS,
+  SEARCH_SORT_OPTIONS,
+  type SearchCollectionOption,
+  type SearchFilter,
+  type SearchResultRow,
+  type SearchSort,
+} from "@/lib/engine-db";
 
 const COLLECTION_LABELS: Record<SearchResultRow["collection"], string> = {
   jobs: "Jobs",
@@ -28,12 +36,56 @@ function groupResults(results: SearchResultRow[]) {
     .filter((group) => group.results.length > 0);
 }
 
+function isCollectionChecked(
+  value: SearchCollectionOption,
+  selectedCollections: SearchCollectionOption[],
+): boolean {
+  const effective = selectedCollections.length > 0 ? selectedCollections : ["all"];
+  return value === "all" ? effective.includes("all") : effective.includes(value);
+}
+
+function getBadgeTone(result: SearchResultRow): "apply" | "skip" | "warn" | "info" | "neutral" {
+  if (result.level === "ERROR" || result.status === "FAILED" || result.status === "ERROR") {
+    return "skip";
+  }
+
+  if (result.decision === "APPLY" || result.status === "SUBMITTED") {
+    return "apply";
+  }
+
+  if (
+    result.decision === "SKIP" ||
+    result.status?.startsWith("SKIPPED")
+  ) {
+    return "skip";
+  }
+
+  if (
+    result.status === "EVALUATED" ||
+    result.status === "READY_TO_SUBMIT" ||
+    result.status === "VIEWED"
+  ) {
+    return "warn";
+  }
+
+  return "neutral";
+}
+
 type SearchSectionProps = {
   query: string;
   results: SearchResultRow[];
+  selectedCollections: SearchCollectionOption[];
+  selectedFilters: SearchFilter[];
+  sort: SearchSort;
 };
 
-export function SearchSection({ query, results }: SearchSectionProps) {
+export function SearchSection({
+  query,
+  results,
+  selectedCollections,
+  selectedFilters,
+  sort,
+}: SearchSectionProps) {
   const trimmed = query.trim();
   const groups = groupResults(results);
 
@@ -42,23 +94,84 @@ export function SearchSection({ query, results }: SearchSectionProps) {
       <Card>
         <SectionTitle
           eyebrow="Search"
-          title="Search across every dashboard collection"
-          subtitle="Run one query, then inspect separate result groups for jobs, reviews, decisions, companies, answers, cached answers, and logs."
+          title="Search across dashboard collections"
+          subtitle="Use collection selection, text query, filter chips, and sorting together. The dashboard only queries the collections you select."
         />
-        <form className="mt-5 flex flex-col gap-3 sm:flex-row" action="/search">
-          <input
-            type="search"
-            name="q"
-            defaultValue={query}
-            placeholder="Search by title, company, URL, reason, decision id, log text..."
-            className="w-full rounded-2xl border border-line bg-panelSoft/80 px-4 py-3 text-sm text-text outline-none transition placeholder:text-slate-500 focus:border-blue-400"
-          />
-          <button
-            type="submit"
-            className="rounded-2xl border border-blue-400/30 bg-blue-400/10 px-5 py-3 text-sm font-medium text-blue-300 transition hover:bg-blue-400/20"
-          >
-            Search
-          </button>
+        <form className="mt-5 space-y-5" action="/search">
+          <div className="flex flex-col gap-3 lg:flex-row">
+            <input
+              type="search"
+              name="q"
+              defaultValue={query}
+              placeholder="Search by title, company, URL, reason, decision id, log text..."
+              className="w-full rounded-2xl border border-line bg-panelSoft/80 px-4 py-3 text-sm text-text outline-none transition placeholder:text-slate-500 focus:border-blue-400"
+            />
+            <select
+              name="sort"
+              defaultValue={sort}
+              className="rounded-2xl border border-line bg-panelSoft/80 px-4 py-3 text-sm text-text outline-none transition focus:border-blue-400"
+            >
+              {SEARCH_SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="submit"
+              className="rounded-2xl border border-blue-400/30 bg-blue-400/10 px-5 py-3 text-sm font-medium text-blue-300 transition hover:bg-blue-400/20"
+            >
+              Search
+            </button>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-info">
+                Collections
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {SEARCH_COLLECTION_OPTIONS.map((option) => (
+                  <label
+                    key={option.value}
+                    className="inline-flex items-center gap-2 rounded-full border border-line bg-panelSoft/70 px-3 py-2 text-sm text-text"
+                  >
+                    <input
+                      type="checkbox"
+                      name="collection"
+                      value={option.value}
+                      defaultChecked={isCollectionChecked(option.value, selectedCollections)}
+                      className="h-4 w-4 accent-blue-400"
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-info">
+                Filters
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {SEARCH_FILTER_OPTIONS.map((option) => (
+                  <label
+                    key={option.value}
+                    className="inline-flex items-center gap-2 rounded-full border border-line bg-panelSoft/70 px-3 py-2 text-sm text-text"
+                  >
+                    <input
+                      type="checkbox"
+                      name="filter"
+                      value={option.value}
+                      defaultChecked={selectedFilters.includes(option.value)}
+                      className="h-4 w-4 accent-blue-400"
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
         </form>
       </Card>
 
@@ -105,6 +218,7 @@ export function SearchSection({ query, results }: SearchSectionProps) {
 
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
                         {result.subtitle ? <span>{result.subtitle}</span> : null}
+                        {typeof result.score === "number" ? <span>Score {result.score}</span> : null}
                         {result.createdAt ? (
                           <span>{new Date(result.createdAt).toLocaleString()}</span>
                         ) : null}
@@ -117,6 +231,8 @@ export function SearchSection({ query, results }: SearchSectionProps) {
 
                     <div className="flex flex-wrap gap-2">
                       <Badge tone="neutral">{group.label}</Badge>
+                      {result.status ? <Badge tone={getBadgeTone(result)}>{result.status}</Badge> : null}
+                      {result.decision ? <Badge tone={getBadgeTone(result)}>{result.decision}</Badge> : null}
                     </div>
                   </div>
 
