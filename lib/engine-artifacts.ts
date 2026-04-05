@@ -7,6 +7,10 @@ type ParsedArtifactDetails = {
   status?: string | null;
   stopReason?: string | null;
   finalStage?: string | null;
+  durationMs?: number | null;
+  runSummary?: string | null;
+  keyEvents?: string[] | null;
+  metrics?: Record<string, string | number | boolean | null> | null;
   externalDetectedBy?: string[] | null;
   externalApplyUrl?: string | null;
   precursorPage?: boolean | null;
@@ -67,6 +71,7 @@ function parseArtifactDetails(payload: unknown): ParsedArtifactDetails | null {
   const easyApplyRecord = (record.easyApply ?? null) as Record<string, unknown> | null;
   const discoveryRecord = (record.discovery ?? null) as Record<string, unknown> | null;
   const fillResultRecord = (record.fillResult ?? null) as Record<string, unknown> | null;
+  const metaRecord = (record.meta ?? null) as Record<string, unknown> | null;
 
   const externalDetectionRecord = (easyApplyRecord?.externalDetection ?? null) as
     | { source?: unknown; signals?: unknown }
@@ -148,6 +153,23 @@ function parseArtifactDetails(payload: unknown): ParsedArtifactDetails | null {
         : typeof (easyApplyRecord?.externalApplication as { finalStage?: unknown } | null)?.finalStage === "string"
           ? ((easyApplyRecord?.externalApplication as { finalStage: string }).finalStage)
           : null,
+    durationMs:
+      typeof metaRecord?.durationMs === "number" ? (metaRecord.durationMs as number) : null,
+    runSummary:
+      typeof metaRecord?.summary === "string" ? (metaRecord.summary as string) : null,
+    keyEvents: Array.isArray(metaRecord?.keyEvents)
+      ? (metaRecord.keyEvents as unknown[]).filter(
+          (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
+        )
+      : null,
+    metrics:
+      metaRecord?.metrics && typeof metaRecord.metrics === "object"
+        ? Object.fromEntries(
+            Object.entries(metaRecord.metrics as Record<string, unknown>).filter(([, value]) =>
+              ["string", "number", "boolean"].includes(typeof value) || value === null,
+            ),
+          ) as Record<string, string | number | boolean | null>
+        : null,
     externalDetectedBy: externalDetection.length > 0 ? externalDetection : null,
     externalApplyUrl:
       typeof easyApplyRecord?.externalApplyUrl === "string"
