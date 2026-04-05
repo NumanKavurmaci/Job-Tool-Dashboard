@@ -402,18 +402,24 @@ export function readPreparedAnswerSets(limit = 20): PreparedAnswerSetRow[] {
           p.createdAt,
           p.questionsJson,
           p.answersJson,
-          COALESCE(j.url, json_extract(p.answersJson, '$.sourceUrl')) AS jobUrl,
+          COALESCE(
+            j.url,
+            json_extract(p.answersJson, '$.originalJobUrl'),
+            json_extract(p.answersJson, '$.sourceUrl')
+          ) AS jobUrl,
           COALESCE(j.title, (
             SELECT jp.title
             FROM JobPosting jp
-            WHERE jp.url = json_extract(p.answersJson, '$.sourceUrl')
+            WHERE jp.url = json_extract(p.answersJson, '$.originalJobUrl')
+               OR jp.url = json_extract(p.answersJson, '$.sourceUrl')
                OR jp.url = json_extract(p.answersJson, '$.finalUrl')
             LIMIT 1
           )) AS title,
           COALESCE(j.company, (
             SELECT jp.company
             FROM JobPosting jp
-            WHERE jp.url = json_extract(p.answersJson, '$.sourceUrl')
+            WHERE jp.url = json_extract(p.answersJson, '$.originalJobUrl')
+               OR jp.url = json_extract(p.answersJson, '$.sourceUrl')
                OR jp.url = json_extract(p.answersJson, '$.finalUrl')
             LIMIT 1
           )) AS company
