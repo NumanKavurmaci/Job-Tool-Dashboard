@@ -2,6 +2,9 @@ import { readRecentArtifacts } from "./engine-artifacts";
 import {
   readAnswerCache,
   readDashboardStats,
+  readTopApplications,
+  readTopMissedHighScoreJobs,
+  readTopPendingApprovedJobs,
   readPreparedAnswerSets,
   readRecentDecisions,
   readRecentFirms,
@@ -21,6 +24,9 @@ export function getDashboardData() {
     reviews: readRecentReviews(),
     logs: readRecentLogs(),
     artifacts: readRecentArtifacts(),
+    topApplications: readTopApplications(),
+    topMissedHighScoreJobs: readTopMissedHighScoreJobs(),
+    topPendingApprovedJobs: readTopPendingApprovedJobs(),
   };
 }
 

@@ -65,8 +65,8 @@ function FieldInput({
 }
 
 export function RunScriptBuilder() {
-  const [scriptType, setScriptType] = useState<RunScriptType>("easy-apply-batch");
-  const [values, setValues] = useState<RunFormValues>(() => buildInitialValues("easy-apply-batch"));
+  const [scriptType, setScriptType] = useState<RunScriptType>("apply-batch");
+  const [values, setValues] = useState<RunFormValues>(() => buildInitialValues("apply-batch"));
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
 
   const definition = useMemo(() => getRunScriptDefinition(scriptType), [scriptType]);
@@ -109,7 +109,7 @@ export function RunScriptBuilder() {
         <SectionTitle
           eyebrow="Options"
           title="Configure a script"
-          subtitle="Pick a CLI command and fill the same flags you would pass in terminal. Dry Run is now configured as a flag inside the relevant flows."
+          subtitle="Pick a CLI command and fill the same flags you would pass in terminal. `easy-apply` stays LinkedIn-only, while `apply` includes all-apply continuation."
         />
 
         <div className="grid gap-2">

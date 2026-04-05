@@ -1,5 +1,6 @@
 import { OverviewLinks } from "@/components/dashboard/overview-links";
 import { OverviewAnalytics } from "@/components/dashboard/overview-analytics";
+import { HomeHighlightsSection } from "@/components/dashboard/home-highlights-section";
 import { OverviewPanel } from "@/components/dashboard/overview-panel";
 import { PageIntro } from "@/components/dashboard/page-intro";
 import { PageShell } from "@/components/dashboard/page-shell";
@@ -28,6 +29,11 @@ export default function HomePage() {
         artifacts={data.artifacts}
       />
       <OverviewPanel engineRoot={data.engineRoot} stats={data.stats} />
+      <HomeHighlightsSection
+        topApplications={data.topApplications}
+        topMissedHighScoreJobs={data.topMissedHighScoreJobs}
+        topPendingApprovedJobs={data.topPendingApprovedJobs}
+      />
       <OverviewLinks />
       <LogsSection logs={data.logs} />
     </PageShell>

@@ -131,6 +131,21 @@ export type SearchResultRow = {
   level?: string | null;
 };
 
+export type HomeHighlightRow = {
+  id: string;
+  jobUrl: string;
+  status: string;
+  decision: string | null;
+  score: number | null;
+  summary: string | null;
+  source: string;
+  createdAt: string;
+  title: string | null;
+  company: string | null;
+  companyLinkedinUrl: string | null;
+  location: string | null;
+};
+
 export const SEARCH_COLLECTION_OPTIONS: Array<{
   value: SearchCollectionOption;
   label: string;
@@ -260,6 +275,65 @@ export function readRecentReviews(limit = 20): ReviewRow[] {
   } finally {
     db.close();
   }
+}
+
+function readLatestReviewHighlightsByWhere(whereSql: string, limit: number): HomeHighlightRow[] {
+  const db = openDb();
+  try {
+    return db
+      .prepare(
+        `
+        SELECT
+          h.id,
+          h.jobUrl,
+          h.status,
+          h.decision,
+          h.score,
+          h.summary,
+          h.source,
+          h.createdAt,
+          j.title,
+          j.company,
+          j.companyLinkedinUrl,
+          j.location
+        FROM JobReviewHistory h
+        LEFT JOIN JobPosting j ON j.id = h.jobPostingId
+        WHERE ${whereSql}
+          AND NOT EXISTS (
+            SELECT 1
+            FROM JobReviewHistory newer
+            WHERE newer.jobUrl = h.jobUrl
+              AND newer.createdAt > h.createdAt
+          )
+        ORDER BY h.score DESC, h.createdAt DESC
+        LIMIT ?
+        `,
+      )
+      .all(limit) as HomeHighlightRow[];
+  } finally {
+    db.close();
+  }
+}
+
+export function readTopApplications(limit = 6): HomeHighlightRow[] {
+  return readLatestReviewHighlightsByWhere(
+    `h.decision = 'APPLY' AND h.status = 'SUBMITTED'`,
+    limit,
+  );
+}
+
+export function readTopMissedHighScoreJobs(limit = 6): HomeHighlightRow[] {
+  return readLatestReviewHighlightsByWhere(
+    `h.decision = 'APPLY' AND h.status = 'FAILED'`,
+    limit,
+  );
+}
+
+export function readTopPendingApprovedJobs(limit = 6): HomeHighlightRow[] {
+  return readLatestReviewHighlightsByWhere(
+    `h.decision = 'APPLY' AND h.status IN ('READY_TO_SUBMIT', 'EVALUATED', 'VIEWED')`,
+    limit,
+  );
 }
 
 export function readRecentLogs(limit = 20): SystemLogRow[] {
@@ -443,10 +517,6 @@ export function searchCollections(
         ? ({ query: input, limitPerCollection: legacyLimitPerCollection } satisfies SearchOptions)
         : input;
     const trimmed = options.query.trim();
-    if (trimmed.length < 2) {
-      return [];
-    }
-
     const collections = toSearchCollectionKeys(options.collections);
     const filters = [...new Set(options.filters ?? [])];
     const sort = options.sort ?? "newest";

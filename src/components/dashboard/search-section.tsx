@@ -86,7 +86,6 @@ export function SearchSection({
   selectedFilters,
   sort,
 }: SearchSectionProps) {
-  const trimmed = query.trim();
   const groups = groupResults(results);
 
   return (
@@ -175,16 +174,16 @@ export function SearchSection({
         </form>
       </Card>
 
-      {trimmed.length < 2 ? (
+      {groups.length === 0 ? (
         <Card>
           <div className="rounded-2xl border border-dashed border-line bg-panelSoft/40 p-6 text-sm text-muted">
-            Enter at least 2 characters to search the engine collections.
-          </div>
-        </Card>
-      ) : groups.length === 0 ? (
-        <Card>
-          <div className="rounded-2xl border border-dashed border-line bg-panelSoft/40 p-6 text-sm text-muted">
-            No matches were found for <span className="font-semibold text-slate-200">{trimmed}</span>.
+            {query.trim().length > 0
+              ? (
+                <>
+                  No matches were found for <span className="font-semibold text-slate-200">{query.trim()}</span>.
+                </>
+              )
+              : "No rows matched the current collection, filter, and sort combination."}
           </div>
         </Card>
       ) : (
