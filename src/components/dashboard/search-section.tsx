@@ -49,7 +49,15 @@ function getBadgeTone(result: SearchResultRow): "apply" | "skip" | "warn" | "inf
     return "skip";
   }
 
-  if (result.decision === "APPLY" || result.status === "SUBMITTED") {
+  if (result.status === "SUBMITTED") {
+    return "apply";
+  }
+
+  if (result.decision === "APPLY" && result.status && result.status !== "SUBMITTED") {
+    return "warn";
+  }
+
+  if (result.decision === "APPLY") {
     return "apply";
   }
 

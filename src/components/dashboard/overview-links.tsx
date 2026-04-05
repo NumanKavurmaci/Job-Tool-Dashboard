@@ -17,9 +17,15 @@ const sections = [
     icon: Search,
   },
   {
+    href: "/search?filter=incomplete&collection=reviews" as Route,
+    title: "Incomplete Applications",
+    description: "Jump straight to approved jobs that still have not reached a submitted state.",
+    icon: ClipboardList,
+  },
+  {
     href: "/reviews" as Route,
     title: "Review History",
-    description: "Inspect recent decisions, scores, thresholds, and skip/apply reasons.",
+    description: "Inspect recent decisions, scores, thresholds, and apply, skip, or incomplete outcomes.",
     icon: History,
   },
   {
@@ -50,7 +56,7 @@ const sections = [
 
 export function OverviewLinks() {
   return (
-    <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+    <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
       {sections.map((section) => {
         const Icon = section.icon;
 

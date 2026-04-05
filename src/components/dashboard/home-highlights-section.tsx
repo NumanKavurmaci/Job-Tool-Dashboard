@@ -63,11 +63,15 @@ function HighlightCard({ group }: { group: HighlightGroup }) {
 
 export function HomeHighlightsSection({
   topApplications,
+  incompleteApplications,
   topMissedHighScoreJobs,
   topPendingApprovedJobs,
 }: Pick<
   DashboardData,
-  "topApplications" | "topMissedHighScoreJobs" | "topPendingApprovedJobs"
+  | "topApplications"
+  | "incompleteApplications"
+  | "topMissedHighScoreJobs"
+  | "topPendingApprovedJobs"
 >) {
   const groups: HighlightGroup[] = [
     {
@@ -77,6 +81,14 @@ export function HomeHighlightsSection({
       rows: topApplications,
       empty: "No submitted applications have been recorded yet.",
       tone: "apply",
+    },
+    {
+      eyebrow: "Incomplete Applications",
+      title: "Approved jobs that still need attention",
+      subtitle: "Every latest job record that started or qualified for apply but did not end in a submitted application.",
+      rows: incompleteApplications,
+      empty: "No incomplete approved applications are currently visible.",
+      tone: "warn",
     },
     {
       eyebrow: "Top Missed",
@@ -97,7 +109,7 @@ export function HomeHighlightsSection({
   ];
 
   return (
-    <section className="grid gap-4 xl:grid-cols-3">
+    <section className="grid gap-4 xl:grid-cols-2">
       {groups.map((group) => (
         <HighlightCard key={group.title} group={group} />
       ))}

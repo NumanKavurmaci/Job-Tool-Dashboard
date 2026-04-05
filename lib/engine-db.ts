@@ -7,6 +7,7 @@ export type DashboardStats = {
   totalLogs: number;
   applyCount: number;
   skipCount: number;
+  incompleteApplyCount: number;
   avgScore: number | null;
 };
 
@@ -104,7 +105,7 @@ export type SearchCollectionKey =
   | "logs";
 
 export type SearchCollectionOption = SearchCollectionKey | "all";
-export type SearchFilter = "applied" | "skipped" | "error" | "pending";
+export type SearchFilter = "applied" | "skipped" | "error" | "pending" | "incomplete";
 export type SearchSort = "newest" | "oldest" | "top-score" | "company-az";
 
 export type SearchOptions = {
@@ -165,6 +166,7 @@ export const SEARCH_FILTER_OPTIONS: Array<{
   label: string;
 }> = [
   { value: "applied", label: "Applied" },
+  { value: "incomplete", label: "Incomplete apply" },
   { value: "skipped", label: "Skipped" },
   { value: "error", label: "Error" },
   { value: "pending", label: "Pending" },
@@ -242,6 +244,18 @@ export function readDashboardStats(): DashboardStats {
           (SELECT COUNT(*) FROM SystemLog) AS totalLogs,
           (SELECT COUNT(*) FROM JobReviewHistory WHERE decision = 'APPLY') AS applyCount,
           (SELECT COUNT(*) FROM JobReviewHistory WHERE decision = 'SKIP') AS skipCount,
+          (
+            SELECT COUNT(*)
+            FROM JobReviewHistory h
+            WHERE h.decision = 'APPLY'
+              AND h.status != 'SUBMITTED'
+              AND NOT EXISTS (
+                SELECT 1
+                FROM JobReviewHistory newer
+                WHERE newer.jobUrl = h.jobUrl
+                  AND newer.createdAt > h.createdAt
+              )
+          ) AS incompleteApplyCount,
           (SELECT AVG(score) FROM JobReviewHistory WHERE score IS NOT NULL) AS avgScore
         `,
       )
@@ -341,6 +355,13 @@ export function readTopMissedHighScoreJobs(limit = 6): HomeHighlightRow[] {
 export function readTopPendingApprovedJobs(limit = 6): HomeHighlightRow[] {
   return readLatestReviewHighlightsByWhere(
     `h.decision = 'APPLY' AND h.status IN ('READY_TO_SUBMIT', 'EVALUATED', 'VIEWED')`,
+    limit,
+  );
+}
+
+export function readIncompleteApplications(limit = 12): HomeHighlightRow[] {
+  return readLatestReviewHighlightsByWhere(
+    `h.decision = 'APPLY' AND h.status != 'SUBMITTED'`,
     limit,
   );
 }
@@ -556,6 +577,8 @@ export function searchCollections(
         switch (filter) {
           case "applied":
             return [`EXISTS (SELECT 1 FROM JobReviewHistory h WHERE h.jobUrl = JobPosting.url AND (h.decision = 'APPLY' OR h.status = 'SUBMITTED'))`];
+          case "incomplete":
+            return [`EXISTS (SELECT 1 FROM JobReviewHistory h WHERE h.jobUrl = JobPosting.url AND h.decision = 'APPLY' AND h.status != 'SUBMITTED')`];
           case "skipped":
             return [`EXISTS (SELECT 1 FROM JobReviewHistory h WHERE h.jobUrl = JobPosting.url AND (h.decision = 'SKIP' OR h.status LIKE 'SKIPPED%'))`];
           case "error":
@@ -628,6 +651,8 @@ export function searchCollections(
         switch (filter) {
           case "applied":
             return `(h.decision = 'APPLY' OR h.status = 'SUBMITTED')`;
+          case "incomplete":
+            return `(h.decision = 'APPLY' AND h.status != 'SUBMITTED')`;
           case "skipped":
             return `(h.decision = 'SKIP' OR h.status LIKE 'SKIPPED%')`;
           case "error":
@@ -701,6 +726,14 @@ export function searchCollections(
         switch (filter) {
           case "applied":
             return `d.decision = 'APPLY'`;
+          case "incomplete":
+            return `EXISTS (
+              SELECT 1
+              FROM JobReviewHistory h
+              WHERE h.jobPostingId = d.jobPostingId
+                AND h.decision = 'APPLY'
+                AND h.status != 'SUBMITTED'
+            )`;
           case "skipped":
             return `d.decision = 'SKIP'`;
           case "error":
@@ -770,6 +803,15 @@ export function searchCollections(
         switch (filter) {
           case "applied":
             return `appliedJobs > 0`;
+          case "incomplete":
+            return `EXISTS (
+              SELECT 1
+              FROM JobPosting j
+              INNER JOIN JobReviewHistory h ON h.jobPostingId = j.id OR h.jobUrl = j.url
+              WHERE j.firmId = Firm.id
+                AND h.decision = 'APPLY'
+                AND h.status != 'SUBMITTED'
+            )`;
           case "skipped":
             return `skippedJobs > 0`;
           case "error":
@@ -848,6 +890,14 @@ export function searchCollections(
               FROM JobReviewHistory h
               WHERE h.jobPostingId = p.jobPostingId
                 AND (h.decision = 'APPLY' OR h.status = 'SUBMITTED')
+            )`;
+          case "incomplete":
+            return `EXISTS (
+              SELECT 1
+              FROM JobReviewHistory h
+              WHERE h.jobPostingId = p.jobPostingId
+                AND h.decision = 'APPLY'
+                AND h.status != 'SUBMITTED'
             )`;
           case "skipped":
             return `EXISTS (
@@ -965,6 +1015,14 @@ export function searchCollections(
         switch (filter) {
           case "applied":
             return `(lower(coalesce(message, '')) LIKE '%submitted%' OR lower(coalesce(message, '')) LIKE '%apply%')`;
+          case "incomplete":
+            return `(
+              lower(coalesce(message, '')) LIKE '%stopped before completion%'
+              OR lower(coalesce(message, '')) LIKE '%ready_to_submit%'
+              OR lower(coalesce(message, '')) LIKE '%final submit step%'
+              OR lower(coalesce(message, '')) LIKE '%external handoff%'
+              OR lower(coalesce(message, '')) LIKE '%incomplete%'
+            )`;
           case "skipped":
             return `lower(coalesce(message, '')) LIKE '%skip%'`;
           case "error":

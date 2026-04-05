@@ -13,7 +13,7 @@ export default function ReviewsPage() {
       <PageIntro
         eyebrow="Review History"
         title="Decision history across reviewed job offers."
-        subtitle="Inspect the latest evaluations, scores, thresholds, and the reasons the engine recorded for apply or skip outcomes."
+        subtitle="Inspect the latest evaluations, scores, thresholds, and the reasons the engine recorded for apply, skip, or incomplete outcomes."
       />
       <ReviewsSection reviews={data.reviews} />
     </PageShell>

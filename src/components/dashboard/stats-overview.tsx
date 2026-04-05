@@ -30,8 +30,8 @@ export function StatsOverview({ stats }: Pick<DashboardData, "stats">) {
       <Card>
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-sm text-muted">System Logs</p>
-            <p className="mt-3 text-3xl font-semibold">{stats.totalLogs}</p>
+            <p className="text-sm text-muted">Incomplete Applications</p>
+            <p className="mt-3 text-3xl font-semibold">{stats.incompleteApplyCount}</p>
           </div>
           <Activity className="text-amber-300" />
         </div>

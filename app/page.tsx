@@ -31,6 +31,7 @@ export default function HomePage() {
       <OverviewPanel engineRoot={data.engineRoot} stats={data.stats} />
       <HomeHighlightsSection
         topApplications={data.topApplications}
+        incompleteApplications={data.incompleteApplications}
         topMissedHighScoreJobs={data.topMissedHighScoreJobs}
         topPendingApprovedJobs={data.topPendingApprovedJobs}
       />
