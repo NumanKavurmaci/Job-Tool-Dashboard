@@ -221,6 +221,15 @@ function compareSearchResults(sort: SearchSort, left: SearchResultRow, right: Se
   return sort === "oldest" ? leftTime - rightTime : rightTime - leftTime;
 }
 
+function fallbackPostingField(field: "title" | "company" | "companyLinkedinUrl" | "location", jobUrlColumn: string) {
+  return `(
+    SELECT jp.${field}
+    FROM JobPosting jp
+    WHERE jp.url = ${jobUrlColumn}
+    LIMIT 1
+  )`;
+}
+
 export function readDashboardStats(): DashboardStats {
   const db = openDb();
   try {
@@ -261,10 +270,10 @@ export function readRecentReviews(limit = 20): ReviewRow[] {
           h.reasons,
           h.summary,
           h.createdAt,
-          j.title,
-          j.company,
-          j.companyLinkedinUrl,
-          j.location
+          COALESCE(j.title, ${fallbackPostingField("title", "h.jobUrl")}) AS title,
+          COALESCE(j.company, ${fallbackPostingField("company", "h.jobUrl")}) AS company,
+          COALESCE(j.companyLinkedinUrl, ${fallbackPostingField("companyLinkedinUrl", "h.jobUrl")}) AS companyLinkedinUrl,
+          COALESCE(j.location, ${fallbackPostingField("location", "h.jobUrl")}) AS location
         FROM JobReviewHistory h
         LEFT JOIN JobPosting j ON j.id = h.jobPostingId
         ORDER BY h.createdAt DESC
@@ -292,10 +301,10 @@ function readLatestReviewHighlightsByWhere(whereSql: string, limit: number): Hom
           h.summary,
           h.source,
           h.createdAt,
-          j.title,
-          j.company,
-          j.companyLinkedinUrl,
-          j.location
+          COALESCE(j.title, ${fallbackPostingField("title", "h.jobUrl")}) AS title,
+          COALESCE(j.company, ${fallbackPostingField("company", "h.jobUrl")}) AS company,
+          COALESCE(j.companyLinkedinUrl, ${fallbackPostingField("companyLinkedinUrl", "h.jobUrl")}) AS companyLinkedinUrl,
+          COALESCE(j.location, ${fallbackPostingField("location", "h.jobUrl")}) AS location
         FROM JobReviewHistory h
         LEFT JOIN JobPosting j ON j.id = h.jobPostingId
         WHERE ${whereSql}
@@ -393,9 +402,21 @@ export function readPreparedAnswerSets(limit = 20): PreparedAnswerSetRow[] {
           p.createdAt,
           p.questionsJson,
           p.answersJson,
-          j.url AS jobUrl,
-          j.title,
-          j.company
+          COALESCE(j.url, json_extract(p.answersJson, '$.sourceUrl')) AS jobUrl,
+          COALESCE(j.title, (
+            SELECT jp.title
+            FROM JobPosting jp
+            WHERE jp.url = json_extract(p.answersJson, '$.sourceUrl')
+               OR jp.url = json_extract(p.answersJson, '$.finalUrl')
+            LIMIT 1
+          )) AS title,
+          COALESCE(j.company, (
+            SELECT jp.company
+            FROM JobPosting jp
+            WHERE jp.url = json_extract(p.answersJson, '$.sourceUrl')
+               OR jp.url = json_extract(p.answersJson, '$.finalUrl')
+            LIMIT 1
+          )) AS company
         FROM PreparedAnswerSet p
         LEFT JOIN JobPosting j ON j.id = p.jobPostingId
         ORDER BY p.createdAt DESC
@@ -622,13 +643,13 @@ export function searchCollections(
             h.score,
             h.status,
             h.decision,
-            j.title,
-            j.company
+            COALESCE(j.title, ${fallbackPostingField("title", "h.jobUrl")}) AS title,
+            COALESCE(j.company, ${fallbackPostingField("company", "h.jobUrl")}) AS company
           FROM JobReviewHistory h
           LEFT JOIN JobPosting j ON j.id = h.jobPostingId
           WHERE (
-              lower(coalesce(j.title, '')) LIKE ?
-           OR lower(coalesce(j.company, '')) LIKE ?
+              lower(coalesce(j.title, ${fallbackPostingField("title", "h.jobUrl")}, '')) LIKE ?
+           OR lower(coalesce(j.company, ${fallbackPostingField("company", "h.jobUrl")}, '')) LIKE ?
            OR lower(coalesce(h.summary, '')) LIKE ?
            OR lower(coalesce(h.reasons, '')) LIKE ?
            OR lower(coalesce(h.jobUrl, '')) LIKE ?
