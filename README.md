@@ -10,6 +10,8 @@ It turns engine data into a cleaner, easier-to-browse interface for:
 - 🧾 review history, decisions, answers, and artifacts
 - 🧰 script generation for engine commands
 
+> Source-available under the [PolyForm Noncommercial 1.0.0](./LICENSE) license. Personal and non-commercial use are allowed. Commercial use is not allowed.
+
 ## ✨ Overview
 
 This project reads the existing engine workspace and presents its data through a modern dashboard UI.
@@ -90,3 +92,9 @@ AI-first file maps live here:
 - `/run` generates scripts but does not execute them
 - `/recommendations` reads `JobRecommendation` rows produced by engine explore mode
 - the dashboard stays separate from the engine repo to keep UI concerns isolated
+
+## 📄 License
+
+This project is source-available under the [PolyForm Noncommercial 1.0.0](./LICENSE) license.
+You can inspect, study, and use it for personal or other non-commercial purposes.
+Commercial use is not permitted without separate permission from the copyright holder.
