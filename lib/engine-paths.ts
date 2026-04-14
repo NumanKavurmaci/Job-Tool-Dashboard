@@ -1,9 +1,17 @@
 import path from "node:path";
 
-const DEFAULT_ENGINE_ROOT = "C:\\Users\\numan\\OneDrive\\Desktop\\Job Tool";
+const DEFAULT_ENGINE_ROOT = path.resolve(process.cwd(), "..", "Job Tool");
 
 export function getEngineRoot(): string {
-  return process.env.ENGINE_ROOT?.trim() || DEFAULT_ENGINE_ROOT;
+  const configuredRoot = process.env.ENGINE_ROOT?.trim();
+
+  if (!configuredRoot) {
+    return DEFAULT_ENGINE_ROOT;
+  }
+
+  return path.isAbsolute(configuredRoot)
+    ? configuredRoot
+    : path.resolve(process.cwd(), configuredRoot);
 }
 
 export function getEngineDbPath(): string {

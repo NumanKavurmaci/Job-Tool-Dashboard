@@ -21,6 +21,7 @@ It currently reads:
 - `artifacts/*`
 
 from the engine workspace configured by `ENGINE_ROOT`.
+If `ENGINE_ROOT` is not set, the dashboard defaults to a sibling `../Job Tool` workspace.
 
 It can also generate engine scripts from the dashboard via the new run page.
 
@@ -66,6 +67,12 @@ npm install
 cp .env.example .env
 ```
 
+The example uses a portable relative path:
+
+```env
+ENGINE_ROOT=../Job Tool
+```
+
 3. Start the dashboard:
 
 ```bash
@@ -84,8 +91,8 @@ npm run build
 
 AI-first file maps live in:
 
-- [docs/README.md](./docs\README.md)
-- [docs/FILE_MAP.md](./docs\FILE_MAP.md)
+- [docs/README.md](./docs/README.md)
+- [docs/FILE_MAP.md](./docs/FILE_MAP.md)
 
 ## Notes
 

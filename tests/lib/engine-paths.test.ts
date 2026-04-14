@@ -26,6 +26,12 @@ describe("engine paths", () => {
   it("falls back to the default engine root when env is missing", () => {
     delete process.env.ENGINE_ROOT;
 
-    expect(getEngineRoot()).toContain("Job Tool");
+    expect(getEngineRoot()).toBe(path.resolve(process.cwd(), "..", "Job Tool"));
+  });
+
+  it("resolves relative ENGINE_ROOT values from the dashboard workspace", () => {
+    process.env.ENGINE_ROOT = "../Job Tool";
+
+    expect(getEngineRoot()).toBe(path.resolve(process.cwd(), "..", "Job Tool"));
   });
 });

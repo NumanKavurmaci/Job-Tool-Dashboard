@@ -8,7 +8,7 @@ Goal:
 - make it obvious which page, component, or data reader to edit next
 
 Start with:
-- [FILE_MAP.md](../docs\FILE_MAP.md)
+- [FILE_MAP.md](./FILE_MAP.md)
 
 Suggested navigation order:
 1. read `app/` to understand page boundaries
