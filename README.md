@@ -1,18 +1,18 @@
 # Job Tool Dashboard
 
-External read-only dashboard for the Job Tool engine.
+🎨 `Job Tool Dashboard` is a read-only Next.js dashboard for the `Job Tool` engine.
 
-## Stack
+It turns engine data into a cleaner, easier-to-browse interface for:
 
-- Next.js
-- React
-- Tailwind CSS
-- better-sqlite3
+- 📊 stats and run summaries
+- 🔎 search across stored job data
+- ⭐ recommendations discovered by explore mode
+- 🧾 review history, decisions, answers, and artifacts
+- 🧰 script generation for engine commands
 
-## Purpose
+## ✨ Overview
 
-This project reads the existing engine workspace and turns its database, logs, and artifacts into
-a dark modern dashboard.
+This project reads the existing engine workspace and presents its data through a modern dashboard UI.
 
 It currently reads:
 
@@ -21,65 +21,55 @@ It currently reads:
 - `artifacts/*`
 
 from the engine workspace configured by `ENGINE_ROOT`.
-If `ENGINE_ROOT` is not set, the dashboard defaults to a sibling `../Job Tool` workspace.
 
-It can also generate engine scripts from the dashboard via the new run page.
+If `ENGINE_ROOT` is not set, the dashboard falls back to a sibling `../Job Tool` workspace.
 
-## Pages
+## 🧱 Stack
 
-- `/`
-  - high-level overview
-  - stats
-  - engine workspace summary
-  - quick links into the deeper views
-- `/search`
-  - search across every major collection
-  - grouped results under separate collection headings
-- `/recommendations`
-  - recommended jobs surfaced by engine explore mode
-  - recommendation summaries, scores, and linked company/job context
-- `/run`
-  - generate ready-to-paste PowerShell `tsx` scripts
-  - configure script options from a left-side panel
-  - use the generated script manually in terminal when needed
-- `/reviews`
-  - review history rows from `JobReviewHistory`
-- `/decisions`
-  - detailed application decisions from `ApplicationDecision`
-- `/answers`
-  - prepared Easy Apply answer sets and reusable answer memory
-- `/artifacts`
-  - recent run artifacts and previews
-- `/companies`
-  - firm-level aggregates, logos, LinkedIn URLs, and linked decisions
+- Next.js
+- React
+- Tailwind CSS
+- better-sqlite3
 
-## Setup
+## 🗂️ Pages
 
-1. Install dependencies:
+- `/` overview, summary cards, and quick links
+- `/search` grouped search across major collections
+- `/recommendations` explore-mode recommendations with summaries and scores
+- `/run` ready-to-paste PowerShell `tsx` script generation
+- `/reviews` review history from `JobReviewHistory`
+- `/decisions` detailed application decisions
+- `/answers` prepared Easy Apply answer sets and reusable answer memory
+- `/artifacts` recent artifacts and previews
+- `/companies` firm-level aggregates, logos, LinkedIn URLs, and linked decisions
+
+## 🚀 Setup
+
+### 1. Install dependencies
 
 ```bash
 npm install
 ```
 
-2. Copy the env file if needed:
+### 2. Create your local env file
 
 ```bash
 cp .env.example .env
 ```
 
-The example uses a portable relative path:
+Portable example:
 
 ```env
 ENGINE_ROOT=../Job Tool
 ```
 
-3. Start the dashboard:
+### 3. Start the dashboard
 
 ```bash
 npm run dev
 ```
 
-## Verification
+## ✅ Verification
 
 ```bash
 npm run type-check
@@ -87,16 +77,16 @@ npm test
 npm run build
 ```
 
-## Documentation
+## 📚 Documentation
 
-AI-first file maps live in:
+AI-first file maps live here:
 
 - [docs/README.md](./docs/README.md)
 - [docs/FILE_MAP.md](./docs/FILE_MAP.md)
 
-## Notes
+## 📝 Notes
 
-- Most pages are still read-focused, and `/run` now focuses on script generation rather than execution.
-- The recommendations page reads `JobRecommendation` rows produced by engine explore mode.
-- The dashboard is still kept separate from the engine repo to reduce coupling and keep UI concerns
-  out of the automation codebase.
+- the dashboard is read-focused by design
+- `/run` generates scripts but does not execute them
+- `/recommendations` reads `JobRecommendation` rows produced by engine explore mode
+- the dashboard stays separate from the engine repo to keep UI concerns isolated
