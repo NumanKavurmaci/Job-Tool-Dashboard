@@ -62,29 +62,43 @@ const sections = [
 
 export function OverviewLinks() {
   return (
-    <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
-      {sections.map((section) => {
-        const Icon = section.icon;
+    <section className="space-y-4">
+      <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-200/75">
+            Show More
+          </p>
+          <h2 className="text-2xl font-semibold text-text">Open the pages built for deeper review</h2>
+          <p className="max-w-3xl text-sm leading-6 text-muted">
+            The homepage is only the quick summary. Each destination below takes you straight into the full dataset for that area.
+          </p>
+        </div>
+      </div>
 
-        return (
-          <Link key={section.href} href={section.href}>
-            <Card className="h-full transition-transform duration-150 hover:-translate-y-0.5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-3">
-                  <div className="inline-flex rounded-2xl border border-line bg-panelSoft/80 p-3 text-info">
-                    <Icon size={18} />
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
+        {sections.map((section) => {
+          const Icon = section.icon;
+
+          return (
+            <Link key={section.href} href={section.href}>
+              <Card className="h-full transition-transform duration-150 hover:-translate-y-0.5">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-3">
+                    <div className="inline-flex rounded-2xl border border-line bg-panelSoft/80 p-3 text-info">
+                      <Icon size={18} />
+                    </div>
+                    <div className="space-y-2">
+                      <h2 className="text-lg font-semibold text-text">{section.title}</h2>
+                      <p className="text-sm leading-6 text-muted">{section.description}</p>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <h2 className="text-lg font-semibold text-text">{section.title}</h2>
-                    <p className="text-sm leading-6 text-muted">{section.description}</p>
-                  </div>
+                  <ArrowRight className="mt-1 text-slate-500" size={18} />
                 </div>
-                <ArrowRight className="mt-1 text-slate-500" size={18} />
-              </div>
-            </Card>
-          </Link>
-        );
-      })}
+              </Card>
+            </Link>
+          );
+        })}
+      </div>
     </section>
   );
 }
