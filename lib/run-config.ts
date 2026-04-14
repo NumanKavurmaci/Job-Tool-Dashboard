@@ -1,6 +1,8 @@
 export type RunScriptType =
   | "score"
   | "decide"
+  | "explore"
+  | "explore-batch"
   | "easy-apply"
   | "easy-apply-batch"
   | "apply"
@@ -33,6 +35,67 @@ export type RunScriptDefinition = {
 export type RunFormValues = Record<string, string | number | boolean | undefined>;
 
 export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
+  {
+    type: "explore-batch",
+    label: "Explore Batch",
+    description: "Evaluate LinkedIn collection jobs one by one and save recommendations without entering any apply flow.",
+    fields: [
+      {
+        key: "url",
+        label: "Collection URL",
+        type: "text",
+        placeholder: "https://www.linkedin.com/jobs/collections/easy-apply",
+        required: true,
+        defaultValue: "https://www.linkedin.com/jobs/collections/easy-apply",
+      },
+      {
+        key: "count",
+        label: "Job Count",
+        type: "number",
+        defaultValue: 25,
+        min: 1,
+      },
+      {
+        key: "scoreThreshold",
+        label: "Score Threshold",
+        type: "number",
+        defaultValue: 40,
+        min: 1,
+      },
+      {
+        key: "disableAiEvaluation",
+        label: "Disable AI Evaluation",
+        type: "checkbox",
+        defaultValue: false,
+      },
+      {
+        key: "useAiScoreAdjustment",
+        label: "Use AI Score Adjustment",
+        type: "checkbox",
+        defaultValue: false,
+      },
+    ],
+  },
+  {
+    type: "explore",
+    label: "Explore Single",
+    description: "Evaluate one job URL and save its recommendation snapshot without attempting any application flow.",
+    fields: [
+      {
+        key: "url",
+        label: "Job URL",
+        type: "text",
+        placeholder: "https://www.linkedin.com/jobs/view/4389593314/",
+        required: true,
+      },
+      {
+        key: "useAiScoreAdjustment",
+        label: "Use AI Score Adjustment",
+        type: "checkbox",
+        defaultValue: false,
+      },
+    ],
+  },
   {
     type: "easy-apply",
     label: "Easy Apply",
@@ -363,6 +426,41 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
       if (booleanValue("useAiScoreAdjustment")) {
         args.push("--ai-score-adjustment");
       }
+      return args;
+    }
+    case "explore": {
+      const url = stringValue("url");
+      if (!url || typeof url !== "string") {
+        throw new Error("Job URL is required.");
+      }
+      args.push(url);
+      if (booleanValue("useAiScoreAdjustment")) {
+        args.push("--ai-score-adjustment");
+      }
+      return args;
+    }
+    case "explore-batch": {
+      const url = stringValue("url");
+      if (!url || typeof url !== "string") {
+        throw new Error("Target URL is required.");
+      }
+      args.push(url);
+
+      const count = stringValue("count");
+      if (count !== undefined && count !== "") {
+        args.push("--count", String(count));
+      }
+
+      pushStringArg(args, "--score-threshold", stringValue("scoreThreshold"));
+
+      if (booleanValue("disableAiEvaluation")) {
+        args.push("--disable-ai-evaluation");
+      }
+
+      if (booleanValue("useAiScoreAdjustment")) {
+        args.push("--ai-score-adjustment");
+      }
+
       return args;
     }
     case "easy-apply": {

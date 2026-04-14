@@ -46,6 +46,7 @@ describe("engine-db", () => {
           totalLogs: 5,
           applyCount: 3,
           skipCount: 6,
+          recommendationCount: 2,
           avgScore: 58,
         },
       },
@@ -58,13 +59,39 @@ describe("engine-db", () => {
       totalLogs: 5,
       applyCount: 3,
       skipCount: 6,
+      recommendationCount: 2,
       avgScore: 58,
     });
     expect(closeMock).toHaveBeenCalledOnce();
   });
 
-  it("reads the recent review, log, firm, answer, and cache collections", async () => {
+  it("reads the recent recommendation, review, log, firm, answer, and cache collections", async () => {
     queueStatements([
+      {
+        all: [
+          {
+            id: "recommendation-1",
+            recommendationStatus: "RECOMMENDED",
+            source: "explore-batch",
+            score: 91,
+            decision: "APPLY",
+            policyAllowed: 1,
+            summary: "Strong fit",
+            reasons: "[\"Strong fit\"]",
+            detailsJson: "{}",
+            createdAt: "2026-03-29T10:00:00.000Z",
+            updatedAt: "2026-03-29T10:00:00.000Z",
+            jobPostingId: "job-1",
+            jobUrl: "https://www.linkedin.com/jobs/view/1",
+            title: "Backend Engineer",
+            company: "Acme",
+            companyLogoUrl: null,
+            companyLinkedinUrl: "https://linkedin.com/company/acme",
+            location: "Remote",
+            normalizedJson: "{}",
+          },
+        ],
+      },
       {
         all: [
           {
@@ -149,6 +176,7 @@ describe("engine-db", () => {
     ]);
 
     const {
+      readRecommendations,
       readRecentReviews,
       readRecentLogs,
       readRecentFirms,
@@ -156,12 +184,13 @@ describe("engine-db", () => {
       readAnswerCache,
     } = await import("@/lib/engine-db");
 
+    expect(readRecommendations(1)[0]?.score).toBe(91);
     expect(readRecentReviews(1)[0]?.company).toBe("Acme");
     expect(readRecentLogs(1)[0]?.message).toBe("Finished");
     expect(readRecentFirms(1)[0]?.totalReviewedJobs).toBe(4);
     expect(readPreparedAnswerSets(1)[0]?.id).toBe("prepared-1");
     expect(readAnswerCache(1)[0]?.normalizedQuestion).toBe("first name");
-    expect(closeMock).toHaveBeenCalledTimes(5);
+    expect(closeMock).toHaveBeenCalledTimes(6);
   });
 
   it("applies decision filters and returns recent decisions", async () => {

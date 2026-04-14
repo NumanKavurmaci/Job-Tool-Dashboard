@@ -1,6 +1,6 @@
 import type { Route } from "next";
 import Link from "next/link";
-import { ArrowRight, Archive, Building2, ClipboardList, History, MessagesSquare, PlaySquare, Search } from "lucide-react";
+import { ArrowRight, Archive, Building2, ClipboardList, History, MessagesSquare, PlaySquare, Search, Sparkles } from "lucide-react";
 import { Card } from "@/components/ui";
 
 const sections = [
@@ -15,6 +15,12 @@ const sections = [
     title: "Search",
     description: "Search every collection separately and inspect grouped results under dedicated sub-headings.",
     icon: Search,
+  },
+  {
+    href: "/recommendations" as Route,
+    title: "Recommendations",
+    description: "Review the jobs explore mode marked as worth pursuing, without any apply flow execution.",
+    icon: Sparkles,
   },
   {
     href: "/search?filter=incomplete&collection=reviews" as Route,

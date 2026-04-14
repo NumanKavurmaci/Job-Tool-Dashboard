@@ -34,6 +34,9 @@ It can also generate engine scripts from the dashboard via the new run page.
 - `/search`
   - search across every major collection
   - grouped results under separate collection headings
+- `/recommendations`
+  - recommended jobs surfaced by engine explore mode
+  - recommendation summaries, scores, and linked company/job context
 - `/run`
   - generate ready-to-paste PowerShell `tsx` scripts
   - configure script options from a left-side panel
@@ -87,5 +90,6 @@ AI-first file maps live in:
 ## Notes
 
 - Most pages are still read-focused, and `/run` now focuses on script generation rather than execution.
+- The recommendations page reads `JobRecommendation` rows produced by engine explore mode.
 - The dashboard is still kept separate from the engine repo to reduce coupling and keep UI concerns
   out of the automation codebase.

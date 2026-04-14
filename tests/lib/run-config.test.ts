@@ -34,6 +34,19 @@ describe("run config", () => {
     ]);
   });
 
+  it("builds single-job explore args", () => {
+    expect(
+      buildRunArgs("explore", {
+        url: "https://www.linkedin.com/jobs/view/4389593314/",
+        useAiScoreAdjustment: true,
+      }),
+    ).toEqual([
+      "explore",
+      "https://www.linkedin.com/jobs/view/4389593314/",
+      "--ai-score-adjustment",
+    ]);
+  });
+
   it("builds build-profile and answer-questions args with optional linkedin", () => {
     expect(
       buildRunArgs("build-profile", {
@@ -78,11 +91,33 @@ describe("run config", () => {
     ).toEqual([
       "easy-apply-batch",
       "https://www.linkedin.com/jobs/collections/easy-apply",
+      "--count",
       "5",
       "--score-threshold",
       "55",
       "--disable-ai-evaluation",
       "--dry-run",
+    ]);
+  });
+
+  it("builds explore-batch args without any apply-specific flags", () => {
+    expect(
+      buildRunArgs("explore-batch", {
+        url: "https://www.linkedin.com/jobs/collections/easy-apply",
+        count: 12,
+        scoreThreshold: 50,
+        disableAiEvaluation: true,
+        useAiScoreAdjustment: true,
+      }),
+    ).toEqual([
+      "explore-batch",
+      "https://www.linkedin.com/jobs/collections/easy-apply",
+      "--count",
+      "12",
+      "--score-threshold",
+      "50",
+      "--disable-ai-evaluation",
+      "--ai-score-adjustment",
     ]);
   });
 

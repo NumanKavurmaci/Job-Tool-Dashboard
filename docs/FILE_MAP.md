@@ -21,6 +21,8 @@
   - overview page; composes general summary sections only
 - [app/search/page.tsx](../app\search\page.tsx)
   - collection-wide search page with grouped result sections
+- [app/recommendations/page.tsx](../app\recommendations\page.tsx)
+  - dedicated explore-mode recommendations page
 - [app/run/page.tsx](../app\run\page.tsx)
   - script generator page with left-side options and right-side PowerShell output
 - [app/reviews/page.tsx](../app\reviews\page.tsx)
@@ -50,6 +52,8 @@
   - quick links from overview into deeper pages
 - [src/components/dashboard/search-section.tsx](../src\components\dashboard\search-section.tsx)
   - grouped search results across dashboard collections
+- [src/components/dashboard/recommendations-section.tsx](../src\components\dashboard\recommendations-section.tsx)
+  - recommendation cards for explore-mode suggested jobs
 - [src/components/dashboard/run-script-builder.tsx](../src\components\dashboard\run-script-builder.tsx)
   - client-side script generator with dynamic options form and copyable PowerShell output
 - [src/components/dashboard/reviews-section.tsx](../src\components\dashboard\reviews-section.tsx)
@@ -74,7 +78,7 @@
 - [lib/run-config.ts](../lib\run-config.ts)
   - shared script definitions and CLI arg construction logic for the script generator
 - [lib/engine-db.ts](../lib\engine-db.ts)
-  - read-only SQLite queries into engine tables, including grouped search helpers
+  - read-only SQLite queries into engine tables, including grouped search helpers and explore recommendations
 - [lib/engine-artifacts.ts](../lib\engine-artifacts.ts)
   - file-system reads for recent artifacts and previews
 - [lib/dashboard-data.ts](../lib\dashboard-data.ts)

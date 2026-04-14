@@ -6,6 +6,7 @@ const links = [
   { href: "/" as Route, label: "Overview" },
   { href: "/run" as Route, label: "Run" },
   { href: "/search" as Route, label: "Search" },
+  { href: "/recommendations" as Route, label: "Recommendations" },
   { href: "/reviews" as Route, label: "Review History" },
   { href: "/decisions" as Route, label: "Decisions" },
   { href: "/answers" as Route, label: "Answers" },

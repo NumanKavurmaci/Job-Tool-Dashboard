@@ -8,6 +8,7 @@ export type DashboardStats = {
   applyCount: number;
   skipCount: number;
   incompleteApplyCount: number;
+  recommendationCount: number;
   avgScore: number | null;
 };
 
@@ -147,6 +148,28 @@ export type HomeHighlightRow = {
   location: string | null;
 };
 
+export type RecommendationRow = {
+  id: string;
+  recommendationStatus: string;
+  source: string;
+  score: number;
+  decision: string;
+  policyAllowed: number;
+  summary: string;
+  reasons: string;
+  detailsJson: string | null;
+  createdAt: string;
+  updatedAt: string;
+  jobPostingId: string;
+  jobUrl: string;
+  title: string | null;
+  company: string | null;
+  companyLogoUrl: string | null;
+  companyLinkedinUrl: string | null;
+  location: string | null;
+  normalizedJson: string | null;
+};
+
 export const SEARCH_COLLECTION_OPTIONS: Array<{
   value: SearchCollectionOption;
   label: string;
@@ -244,6 +267,11 @@ export function readDashboardStats(): DashboardStats {
           (SELECT COUNT(*) FROM SystemLog) AS totalLogs,
           (SELECT COUNT(*) FROM JobReviewHistory WHERE decision = 'APPLY') AS applyCount,
           (SELECT COUNT(*) FROM JobReviewHistory WHERE decision = 'SKIP') AS skipCount,
+          (
+            SELECT COUNT(*)
+            FROM JobRecommendation
+            WHERE recommendationStatus = 'RECOMMENDED'
+          ) AS recommendationCount,
           (
             SELECT COUNT(*)
             FROM JobReviewHistory h
@@ -549,6 +577,45 @@ export function readRecentDecisions(args?: {
         `,
       )
       .all(...params, limit) as DecisionRow[];
+  } finally {
+    db.close();
+  }
+}
+
+export function readRecommendations(limit = 40): RecommendationRow[] {
+  const db = openDb();
+  try {
+    return db
+      .prepare(
+        `
+        SELECT
+          r.id,
+          r.recommendationStatus,
+          r.source,
+          r.score,
+          r.decision,
+          r.policyAllowed,
+          r.summary,
+          r.reasons,
+          r.detailsJson,
+          r.createdAt,
+          r.updatedAt,
+          r.jobPostingId,
+          j.url AS jobUrl,
+          j.title,
+          j.company,
+          j.companyLogoUrl,
+          j.companyLinkedinUrl,
+          j.location,
+          j.normalizedJson
+        FROM JobRecommendation r
+        INNER JOIN JobPosting j ON j.id = r.jobPostingId
+        WHERE r.recommendationStatus = 'RECOMMENDED'
+        ORDER BY r.score DESC, r.updatedAt DESC
+        LIMIT ?
+        `,
+      )
+      .all(limit) as RecommendationRow[];
   } finally {
     db.close();
   }
