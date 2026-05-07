@@ -1,4 +1,5 @@
 export type RunScriptType =
+  | "dashboard"
   | "score"
   | "decide"
   | "explore"
@@ -11,7 +12,7 @@ export type RunScriptType =
   | "build-profile"
   | "answer-questions";
 
-export type RunFieldType = "text" | "number" | "checkbox";
+export type RunFieldType = "text" | "number" | "checkbox" | "select";
 
 export type RunFieldDefinition = {
   key: string;
@@ -22,6 +23,7 @@ export type RunFieldDefinition = {
   defaultValue?: string | number | boolean;
   required?: boolean;
   min?: number;
+  options?: Array<{ value: string; label: string }>;
 };
 
 export type RunScriptDefinition = {
@@ -35,6 +37,20 @@ export type RunScriptDefinition = {
 export type RunFormValues = Record<string, string | number | boolean | undefined>;
 
 export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
+  {
+    type: "dashboard",
+    label: "Dashboard Snapshot",
+    description: "Print a terminal snapshot from persisted recommendations, reviews, and firm stats.",
+    fields: [
+      {
+        key: "limit",
+        label: "Limit",
+        type: "number",
+        defaultValue: 5,
+        min: 1,
+      },
+    ],
+  },
   {
     type: "explore-batch",
     label: "Explore Batch",
@@ -64,15 +80,20 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
       },
       {
         key: "disableAiEvaluation",
-        label: "Disable AI Evaluation",
+        label: "Bypass Evaluation Gate",
         type: "checkbox",
         defaultValue: false,
+        description: "Skips extraction/scoring and lets the batch process matching jobs directly.",
       },
       {
-        key: "useAiScoreAdjustment",
-        label: "Use AI Score Adjustment",
-        type: "checkbox",
-        defaultValue: false,
+        key: "scoringMode",
+        label: "Scoring Mode",
+        type: "select",
+        defaultValue: "local",
+        options: [
+          { value: "local", label: "Local deterministic" },
+          { value: "ai", label: "AI direct score" },
+        ],
       },
     ],
   },
@@ -89,10 +110,14 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
         required: true,
       },
       {
-        key: "useAiScoreAdjustment",
-        label: "Use AI Score Adjustment",
-        type: "checkbox",
-        defaultValue: false,
+        key: "scoringMode",
+        label: "Scoring Mode",
+        type: "select",
+        defaultValue: "local",
+        options: [
+          { value: "local", label: "Local deterministic" },
+          { value: "ai", label: "AI direct score" },
+        ],
       },
     ],
   },
@@ -155,15 +180,20 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
       },
       {
         key: "disableAiEvaluation",
-        label: "Disable AI Evaluation",
+        label: "Bypass Evaluation Gate",
         type: "checkbox",
         defaultValue: false,
+        description: "Skips extraction/scoring and lets the batch process matching jobs directly.",
       },
       {
-        key: "useAiScoreAdjustment",
-        label: "Use AI Score Adjustment",
-        type: "checkbox",
-        defaultValue: false,
+        key: "scoringMode",
+        label: "Scoring Mode",
+        type: "select",
+        defaultValue: "local",
+        options: [
+          { value: "local", label: "Local deterministic" },
+          { value: "ai", label: "AI direct score" },
+        ],
       },
       {
         key: "dryRun",
@@ -244,15 +274,20 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
       },
       {
         key: "disableAiEvaluation",
-        label: "Disable AI Evaluation",
+        label: "Bypass Evaluation Gate",
         type: "checkbox",
         defaultValue: false,
+        description: "Skips extraction/scoring and lets the batch process matching jobs directly.",
       },
       {
-        key: "useAiScoreAdjustment",
-        label: "Use AI Score Adjustment",
-        type: "checkbox",
-        defaultValue: false,
+        key: "scoringMode",
+        label: "Scoring Mode",
+        type: "select",
+        defaultValue: "local",
+        options: [
+          { value: "local", label: "Local deterministic" },
+          { value: "ai", label: "AI direct score" },
+        ],
       },
       {
         key: "dryRun",
@@ -311,10 +346,14 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
         required: true,
       },
       {
-        key: "useAiScoreAdjustment",
-        label: "Use AI Score Adjustment",
-        type: "checkbox",
-        defaultValue: false,
+        key: "scoringMode",
+        label: "Scoring Mode",
+        type: "select",
+        defaultValue: "local",
+        options: [
+          { value: "local", label: "Local deterministic" },
+          { value: "ai", label: "AI direct score" },
+        ],
       },
     ],
   },
@@ -331,10 +370,14 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
         required: true,
       },
       {
-        key: "useAiScoreAdjustment",
-        label: "Use AI Score Adjustment",
-        type: "checkbox",
-        defaultValue: false,
+        key: "scoringMode",
+        label: "Scoring Mode",
+        type: "select",
+        defaultValue: "local",
+        options: [
+          { value: "local", label: "Local deterministic" },
+          { value: "ai", label: "AI direct score" },
+        ],
       },
     ],
   },
@@ -414,8 +457,18 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
     return typeof value === "string" ? value.trim() : value;
   };
   const booleanValue = (key: string) => values[key] === true;
+  const pushScoringMode = () => {
+    const mode = stringValue("scoringMode");
+    if (mode === "ai") {
+      args.push("--scoring", "ai");
+    }
+  };
 
   switch (type) {
+    case "dashboard": {
+      pushStringArg(args, "--limit", stringValue("limit"));
+      return args;
+    }
     case "score":
     case "decide": {
       const url = stringValue("url");
@@ -423,9 +476,7 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
         throw new Error("Job URL is required.");
       }
       args.push(url);
-      if (booleanValue("useAiScoreAdjustment")) {
-        args.push("--ai-score-adjustment");
-      }
+      pushScoringMode();
       return args;
     }
     case "explore": {
@@ -434,9 +485,7 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
         throw new Error("Job URL is required.");
       }
       args.push(url);
-      if (booleanValue("useAiScoreAdjustment")) {
-        args.push("--ai-score-adjustment");
-      }
+      pushScoringMode();
       return args;
     }
     case "explore-batch": {
@@ -457,9 +506,7 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
         args.push("--disable-ai-evaluation");
       }
 
-      if (booleanValue("useAiScoreAdjustment")) {
-        args.push("--ai-score-adjustment");
-      }
+      pushScoringMode();
 
       return args;
     }
@@ -506,9 +553,7 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
         args.push("--disable-ai-evaluation");
       }
 
-      if (booleanValue("useAiScoreAdjustment")) {
-        args.push("--ai-score-adjustment");
-      }
+      pushScoringMode();
 
       if (booleanValue("dryRun")) {
         args.push("--dry-run");
@@ -535,9 +580,7 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
         args.push("--disable-ai-evaluation");
       }
 
-      if (booleanValue("useAiScoreAdjustment")) {
-        args.push("--ai-score-adjustment");
-      }
+      pushScoringMode();
 
       if (booleanValue("dryRun")) {
         args.push("--dry-run");

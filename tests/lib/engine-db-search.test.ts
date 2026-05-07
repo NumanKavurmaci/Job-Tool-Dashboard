@@ -37,8 +37,8 @@ describe("searchCollections query orchestration", () => {
 
     expect(searchCollections("a")).toEqual([]);
     expect(searchCollections({ query: " " })).toEqual([]);
-    expect(DatabaseMock).toHaveBeenCalledTimes(2);
-    expect(closeMock).toHaveBeenCalledTimes(2);
+    expect(DatabaseMock).not.toHaveBeenCalled();
+    expect(closeMock).not.toHaveBeenCalled();
   });
 
   it("expands all collections by default and queries every search table", async () => {

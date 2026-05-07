@@ -43,6 +43,26 @@ function FieldInput({
     );
   }
 
+  if (field.type === "select") {
+    return (
+      <label className="space-y-2">
+        <span className="text-sm font-medium text-text">{field.label}</span>
+        <select
+          className="w-full rounded-2xl border border-line bg-slate-950/80 px-4 py-3 text-sm text-text outline-none transition focus:border-blue-400"
+          value={String(value ?? field.defaultValue ?? "")}
+          onChange={(event) => onChange(event.target.value)}
+        >
+          {(field.options ?? []).map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        {field.description ? <p className="text-xs text-muted">{field.description}</p> : null}
+      </label>
+    );
+  }
+
   return (
     <label className="space-y-2">
       <div className="flex items-center justify-between gap-3">

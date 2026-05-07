@@ -19,6 +19,11 @@ describe("ReviewsSection", () => {
             policyAllowed: 1,
             reasons: "[]",
             summary: "This LinkedIn job redirects to an external application page.",
+            detailsJson: JSON.stringify({
+              scoringSource: "llm",
+              aiConfidence: "medium",
+              aiReasoning: "Strong primary stack fit.",
+            }),
             createdAt: "2026-03-29T12:00:00.000Z",
             title: "System Engineer",
             company: "Ticimax",
@@ -35,6 +40,8 @@ describe("ReviewsSection", () => {
     expect(html).toContain("Ticimax");
     expect(html).toContain("SKIPPED_DUE_TO_EASY_APPLY_RUN");
     expect(html).toContain("APPLY");
+    expect(html).toContain("llm / medium");
+    expect(html).toContain("Strong primary stack fit.");
     expect(html).not.toContain(">https://www.linkedin.com/jobs/view/1<");
     expect(html).toContain("/decisions?company=Ticimax&amp;jobUrl=https%3A%2F%2Fwww.linkedin.com%2Fjobs%2Fview%2F1");
   });
@@ -55,6 +62,7 @@ describe("ReviewsSection", () => {
             policyAllowed: 0,
             reasons: "[]",
             summary: "Policy blocked.",
+            detailsJson: null,
             createdAt: "2026-03-29T12:00:00.000Z",
             title: "Researcher",
             company: "Unknown Co",

@@ -1,6 +1,25 @@
 import type { DashboardData } from "@/lib/dashboard-data";
 import { Badge, Card, SectionTitle } from "@/components/ui";
 
+type ReviewDetails = {
+  aiAdjustment?: number | null;
+  aiReasoning?: string | null;
+  aiConfidence?: string | null;
+  scoringSource?: string | null;
+};
+
+function parseJson<T>(value: string | null): T | null {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return null;
+  }
+}
+
 function buildDecisionHref(filters: { company?: string; jobUrl?: string }) {
   const params = new URLSearchParams();
   if (filters.company) {
@@ -34,7 +53,10 @@ export function ReviewsSection({ reviews }: Pick<DashboardData, "reviews">) {
             </tr>
           </thead>
           <tbody className="divide-y divide-line/70">
-            {reviews.map((review) => (
+            {reviews.map((review) => {
+              const details = parseJson<ReviewDetails>(review.detailsJson);
+
+              return (
               <tr key={review.id} className="align-top">
                 <td className="py-4 pr-4">
                   <div className="space-y-1">
@@ -98,13 +120,25 @@ export function ReviewsSection({ reviews }: Pick<DashboardData, "reviews">) {
                       threshold {review.threshold}
                     </span>
                   ) : null}
+                  {details?.scoringSource ? (
+                    <span className="mt-1 block text-xs text-muted">
+                      {details.scoringSource}
+                      {details.aiConfidence ? ` / ${details.aiConfidence}` : ""}
+                    </span>
+                  ) : null}
                 </td>
                 <td className="py-4 pr-4 text-muted">{review.source}</td>
                 <td className="py-4 text-muted">
                   {review.summary ?? review.reasons}
+                  {details?.aiReasoning ? (
+                    <span className="mt-2 block text-xs text-slate-400">
+                      {details.aiReasoning}
+                    </span>
+                  ) : null}
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

@@ -36,6 +36,7 @@ export type ReviewRow = {
   policyAllowed: number | null;
   reasons: string;
   summary: string | null;
+  detailsJson: string | null;
   createdAt: string;
   title: string | null;
   company: string | null;
@@ -311,6 +312,7 @@ export function readRecentReviews(limit = 20): ReviewRow[] {
           h.policyAllowed,
           h.reasons,
           h.summary,
+          h.detailsJson,
           h.createdAt,
           COALESCE(j.title, ${fallbackPostingField("title", "h.jobUrl")}) AS title,
           COALESCE(j.company, ${fallbackPostingField("company", "h.jobUrl")}) AS company,
@@ -625,13 +627,17 @@ export function searchCollections(
   input: string | SearchOptions,
   legacyLimitPerCollection = 6,
 ): SearchResultRow[] {
+  const options =
+    typeof input === "string"
+      ? ({ query: input, limitPerCollection: legacyLimitPerCollection } satisfies SearchOptions)
+      : input;
+  const trimmed = options.query.trim();
+  if (trimmed.length < 2) {
+    return [];
+  }
+
   const db = openDb();
   try {
-    const options =
-      typeof input === "string"
-        ? ({ query: input, limitPerCollection: legacyLimitPerCollection } satisfies SearchOptions)
-        : input;
-    const trimmed = options.query.trim();
     const collections = toSearchCollectionKeys(options.collections);
     const filters = [...new Set(options.filters ?? [])];
     const sort = options.sort ?? "newest";

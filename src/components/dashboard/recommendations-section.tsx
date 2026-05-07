@@ -3,7 +3,10 @@ import { Badge, Card, SectionTitle } from "@/components/ui";
 
 type RecommendationDetails = {
   scoreThreshold?: number | null;
+  aiAdjustment?: number | null;
   aiReasoning?: string | null;
+  aiConfidence?: string | null;
+  scoringSource?: string | null;
   diagnostics?: {
     applicationType?: string | null;
   } | null;
@@ -74,6 +77,8 @@ function buildSignals(args: {
 
   return [
     recommendation.policyAllowed ? "Policy pass" : "Policy blocked",
+    details?.scoringSource ? `Scoring: ${details.scoringSource}` : null,
+    details?.aiConfidence ? `AI confidence: ${details.aiConfidence}` : null,
     formatRemoteType(normalized?.remoteType),
     formatSeniority(normalized?.seniority),
     details?.diagnostics?.applicationType ?? null,
@@ -173,7 +178,12 @@ export function RecommendationsSection({
                     </div>
 
                     {details?.aiReasoning ? (
-                      <p className="text-xs leading-5 text-slate-400">{details.aiReasoning}</p>
+                      <div className="space-y-1 text-xs leading-5 text-slate-400">
+                        <p>{details.aiReasoning}</p>
+                        {details.aiAdjustment != null && details.aiAdjustment !== 0 ? (
+                          <p>Legacy AI adjustment: {details.aiAdjustment}</p>
+                        ) : null}
+                      </div>
                     ) : null}
                   </div>
 

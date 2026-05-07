@@ -185,7 +185,9 @@ export function SearchSection({
       {groups.length === 0 ? (
         <Card>
           <div className="rounded-2xl border border-dashed border-line bg-panelSoft/40 p-6 text-sm text-muted">
-            {query.trim().length > 0
+            {query.trim().length < 2
+              ? "Enter at least 2 characters to search across dashboard collections."
+              : query.trim().length > 0
               ? (
                 <>
                   No matches were found for <span className="font-semibold text-slate-200">{query.trim()}</span>.

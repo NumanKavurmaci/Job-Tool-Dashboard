@@ -26,7 +26,7 @@ describe("run config", () => {
     expect(
       buildRunArgs("decide", {
         url: "https://www.linkedin.com/jobs/view/4389593314/",
-        useAiScoreAdjustment: false,
+        scoringMode: "local",
       }),
     ).toEqual([
       "decide",
@@ -38,13 +38,22 @@ describe("run config", () => {
     expect(
       buildRunArgs("explore", {
         url: "https://www.linkedin.com/jobs/view/4389593314/",
-        useAiScoreAdjustment: true,
+        scoringMode: "ai",
       }),
     ).toEqual([
       "explore",
       "https://www.linkedin.com/jobs/view/4389593314/",
-      "--ai-score-adjustment",
+      "--scoring",
+      "ai",
     ]);
+  });
+
+  it("builds dashboard snapshot args", () => {
+    expect(
+      buildRunArgs("dashboard", {
+        limit: 5,
+      }),
+    ).toEqual(["dashboard", "--limit", "5"]);
   });
 
   it("builds build-profile and answer-questions args with optional linkedin", () => {
@@ -85,7 +94,7 @@ describe("run config", () => {
         count: 5,
         scoreThreshold: 55,
         disableAiEvaluation: true,
-        useAiScoreAdjustment: false,
+        scoringMode: "local",
         dryRun: true,
       }),
     ).toEqual([
@@ -107,7 +116,7 @@ describe("run config", () => {
         count: 12,
         scoreThreshold: 50,
         disableAiEvaluation: true,
-        useAiScoreAdjustment: true,
+        scoringMode: "ai",
       }),
     ).toEqual([
       "explore-batch",
@@ -117,7 +126,8 @@ describe("run config", () => {
       "--score-threshold",
       "50",
       "--disable-ai-evaluation",
-      "--ai-score-adjustment",
+      "--scoring",
+      "ai",
     ]);
   });
 
@@ -163,10 +173,11 @@ describe("run config", () => {
       "100",
       "--score-threshold",
       "40",
-      "--ai-score-adjustment",
+      "--scoring",
+      "ai",
     ]);
 
-    expect(script).toContain("await main(['easy-apply-batch', 'https://www.linkedin.com/jobs/collections/top-applicant', '100', '--score-threshold', '40', '--ai-score-adjustment'], appDeps);");
+    expect(script).toContain("await main(['easy-apply-batch', 'https://www.linkedin.com/jobs/collections/top-applicant', '100', '--score-threshold', '40', '--scoring', 'ai'], appDeps);");
     expect(script).not.toContain("await main([easy-apply-batch");
   });
 
