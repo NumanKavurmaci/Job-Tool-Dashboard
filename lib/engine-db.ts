@@ -632,7 +632,7 @@ export function searchCollections(
       ? ({ query: input, limitPerCollection: legacyLimitPerCollection } satisfies SearchOptions)
       : input;
   const trimmed = options.query.trim();
-  if (trimmed.length < 2) {
+  if (trimmed.length > 0 && trimmed.length < 2) {
     return [];
   }
 
@@ -1033,7 +1033,7 @@ export function searchCollections(
           collection: "answers" as const,
           title: row.title ?? "Prepared answer set",
           subtitle: row.company ?? "Unknown company",
-          body: row.questionsJson.slice(0, 180),
+          body: row.questionsJson,
           createdAt: row.createdAt,
           primaryUrl: row.jobUrl,
           secondaryUrl: `/answers`,

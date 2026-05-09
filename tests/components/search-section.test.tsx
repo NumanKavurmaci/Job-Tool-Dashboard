@@ -44,8 +44,9 @@ describe("SearchSection", () => {
     expect(html).toContain("Companies");
     expect(html).toContain("Full Stack Engineer");
     expect(html).toContain("Wide and Wise");
-    expect(html).toContain("View related decisions");
-    expect(html).toContain("Open companies view");
+    expect(html).toContain("Details");
+    expect(html).toContain("Compact");
+    expect(html).toContain("Browse");
     expect(html).toContain("Collections");
     expect(html).toContain("Filters");
     expect(html).toContain("Top score");
@@ -53,10 +54,24 @@ describe("SearchSection", () => {
     expect(html).toContain("SUBMITTED");
   });
 
-  it("renders a helpful empty prompt before a real query", () => {
+  it("renders browse mode copy for an empty query", () => {
     const html = renderToStaticMarkup(
       <SearchSection
         query=""
+        selectedCollections={["all"]}
+        selectedFilters={[]}
+        sort="newest"
+        results={[]}
+      />,
+    );
+    expect(html).toContain("Browse dashboard collections");
+    expect(html).toContain("No rows matched the current collection, filter, and sort combination.");
+  });
+
+  it("renders a helpful short-query prompt before a real query", () => {
+    const html = renderToStaticMarkup(
+      <SearchSection
+        query="a"
         selectedCollections={["all"]}
         selectedFilters={[]}
         sort="newest"
@@ -170,6 +185,6 @@ describe("SearchSection", () => {
     expect(html).toContain("SKIPPED");
     expect(html).toContain("READY_TO_SUBMIT");
     expect(html).toContain("ERROR");
-    expect(html).toContain("Open overview");
+    expect(html).toContain("Details");
   });
 });

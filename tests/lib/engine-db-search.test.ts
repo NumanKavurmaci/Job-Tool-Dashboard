@@ -32,13 +32,30 @@ describe("searchCollections query orchestration", () => {
     DatabaseMock.mockClear();
   });
 
-  it("returns an empty array for queries shorter than 2 characters and never opens sqlite", async () => {
+  it("returns an empty array for non-empty queries shorter than 2 characters and never opens sqlite", async () => {
     const { searchCollections } = await import("@/lib/engine-db");
 
     expect(searchCollections("a")).toEqual([]);
-    expect(searchCollections({ query: " " })).toEqual([]);
     expect(DatabaseMock).not.toHaveBeenCalled();
     expect(closeMock).not.toHaveBeenCalled();
+  });
+
+  it("treats an empty query as browse mode and queries selected collections", async () => {
+    queueSearchStatements([[]]);
+
+    const { searchCollections } = await import("@/lib/engine-db");
+    const result = searchCollections({
+      query: " ",
+      collections: ["jobs"],
+      filters: ["pending"],
+      sort: "newest",
+      limitPerCollection: 5,
+    });
+
+    expect(result).toEqual([]);
+    expect(prepareMock).toHaveBeenCalledTimes(1);
+    expect(String(prepareMock.mock.calls[0]?.[0])).toContain("FROM JobPosting");
+    expect(closeMock).toHaveBeenCalledOnce();
   });
 
   it("expands all collections by default and queries every search table", async () => {
