@@ -32,6 +32,22 @@ export type ParsedArtifactDetails = {
     validationFeedback: string;
     finalFeedback?: string | null;
   }> | null;
+  outcomeJobs?: {
+    recommended: RunOutcomeJob[];
+    applied: RunOutcomeJob[];
+    incomplete: RunOutcomeJob[];
+  };
+};
+
+export type RunOutcomeJob = {
+  url: string;
+  title: string | null;
+  company: string | null;
+  location: string | null;
+  score: number | null;
+  decision: string | null;
+  status: string | null;
+  reason: string | null;
 };
 
 export type ArtifactSummary = {
@@ -122,6 +138,84 @@ function normalizeTimings(value: unknown): ParsedArtifactDetails["timings"] {
     ] => entry !== null);
 
   return entries.length > 0 ? Object.fromEntries(entries) : null;
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function numberValue(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readOutcomeJob(value: unknown): RunOutcomeJob | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const evaluation = (record.evaluation ?? null) as Record<string, unknown> | null;
+  const diagnostics = (evaluation?.diagnostics ?? null) as Record<string, unknown> | null;
+  const result = (record.result ?? null) as Record<string, unknown> | null;
+  const url = stringValue(record.url) ?? stringValue(result?.url);
+
+  if (!url) {
+    return null;
+  }
+
+  return {
+    url,
+    title: stringValue(diagnostics?.title),
+    company: stringValue(diagnostics?.company),
+    location: stringValue(diagnostics?.location),
+    score: numberValue(evaluation?.score),
+    decision: stringValue(evaluation?.finalDecision),
+    status: stringValue(result?.status),
+    reason: stringValue(evaluation?.reason) ?? stringValue(result?.stopReason),
+  };
+}
+
+function isRecommendedJob(value: unknown): boolean {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const evaluation = ((value as Record<string, unknown>).evaluation ?? null) as Record<string, unknown> | null;
+  return evaluation?.shouldApply === true || evaluation?.finalDecision === "APPLY";
+}
+
+function isSubmittedJob(value: unknown): boolean {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const result = ((value as Record<string, unknown>).result ?? null) as Record<string, unknown> | null;
+  const status = stringValue(result?.status)?.toLowerCase();
+  const stopReason = stringValue(result?.stopReason)?.toLowerCase();
+  return status === "submitted" || stopReason?.includes("submitted") === true;
+}
+
+function hasAttemptResult(value: unknown): boolean {
+  return Boolean(value && typeof value === "object" && (value as Record<string, unknown>).result);
+}
+
+function parseOutcomeJobs(resultRecord: Record<string, unknown> | null): ParsedArtifactDetails["outcomeJobs"] {
+  const jobs = Array.isArray(resultRecord?.jobs) ? resultRecord.jobs : [];
+  const readableJobs = jobs
+    .map((job) => ({ raw: job, item: readOutcomeJob(job) }))
+    .filter((entry): entry is { raw: unknown; item: RunOutcomeJob } => entry.item !== null);
+
+  return {
+    recommended: readableJobs
+      .filter((entry) => isRecommendedJob(entry.raw))
+      .map((entry) => entry.item),
+    applied: readableJobs
+      .filter((entry) => isSubmittedJob(entry.raw))
+      .map((entry) => entry.item),
+    incomplete: readableJobs
+      .filter((entry) => hasAttemptResult(entry.raw) && !isSubmittedJob(entry.raw))
+      .map((entry) => entry.item),
+  };
 }
 
 function parseArtifactDetails(payload: unknown): ParsedArtifactDetails | null {
@@ -254,6 +348,7 @@ function parseArtifactDetails(payload: unknown): ParsedArtifactDetails | null {
         : null,
     siteFeedback: siteFeedback.length > 0 ? [...new Set(siteFeedback)] : null,
     aiCorrectionAttempts: aiCorrectionAttempts.length > 0 ? aiCorrectionAttempts : null,
+    outcomeJobs: parseOutcomeJobs(resultRecord),
   };
 }
 

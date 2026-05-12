@@ -1,6 +1,6 @@
 import type { Route } from "next";
 import Link from "next/link";
-import type { ArtifactSummary } from "@/lib/engine-artifacts";
+import type { ArtifactSummary, RunOutcomeJob } from "@/lib/engine-artifacts";
 import { Badge, Card, SectionTitle } from "@/components/ui";
 
 function DetailRow({
@@ -44,6 +44,58 @@ function statusTone(status: string | null | undefined) {
   if (status === "completed" || status === "success" || status === "submitted") return "apply" as const;
   if (status === "failed" || status === "error") return "warn" as const;
   return "info" as const;
+}
+
+function JobOutcomeList({
+  title,
+  tone,
+  jobs,
+  emptyText,
+}: {
+  title: string;
+  tone: "apply" | "skip" | "warn" | "info" | "neutral";
+  jobs: RunOutcomeJob[];
+  emptyText: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-line bg-panelSoft/80 p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-text">{title}</p>
+        <Badge tone={tone}>{jobs.length}</Badge>
+      </div>
+      {jobs.length === 0 ? (
+        <p className="text-sm text-muted">{emptyText}</p>
+      ) : (
+        <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+          {jobs.map((job) => (
+            <a
+              key={`${title}-${job.url}`}
+              href={job.url}
+              target="_blank"
+              rel="noreferrer"
+              className="block rounded-xl border border-line/70 bg-slate-950/25 p-3 transition hover:border-blue-400/40"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-text">{job.title ?? "Unknown title"}</p>
+                  <p className="mt-1 truncate text-xs text-muted">
+                    {job.company ?? "Unknown company"}
+                    {job.location ? ` / ${job.location}` : ""}
+                  </p>
+                </div>
+                {job.score != null ? <Badge tone="neutral">{job.score}</Badge> : null}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {job.decision ? <Badge tone={job.decision === "APPLY" ? "apply" : "skip"}>{job.decision}</Badge> : null}
+                {job.status ? <Badge tone={statusTone(job.status)}>{job.status}</Badge> : null}
+              </div>
+              {job.reason ? <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted">{job.reason}</p> : null}
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function ArtifactsSection({ artifacts }: { artifacts: ArtifactSummary[] }) {
@@ -108,6 +160,11 @@ export function ArtifactDetailsSection({ artifact }: { artifact: ArtifactSummary
     ([, left], [, right]) => right.totalMs - left.totalMs,
   );
   const maxTiming = Math.max(...timingEntries.map(([, timing]) => timing.totalMs), 0);
+  const outcomeJobs = details?.outcomeJobs ?? {
+    recommended: [],
+    applied: [],
+    incomplete: [],
+  };
 
   return (
     <div className="space-y-6">
@@ -145,6 +202,34 @@ export function ArtifactDetailsSection({ artifact }: { artifact: ArtifactSummary
         </div>
       </Card>
 
+      <Card>
+        <SectionTitle
+          eyebrow="Jobs"
+          title="Run outcomes"
+          subtitle="Recommended jobs, submitted applications, and attempts that stopped before submission."
+        />
+        <div className="mt-5 grid gap-4 xl:grid-cols-3">
+          <JobOutcomeList
+            title="Recommended"
+            tone="info"
+            jobs={outcomeJobs.recommended}
+            emptyText="No recommended jobs were recorded for this run."
+          />
+          <JobOutcomeList
+            title="Applied"
+            tone="apply"
+            jobs={outcomeJobs.applied}
+            emptyText="No submitted applications were recorded for this run."
+          />
+          <JobOutcomeList
+            title="Tried but incomplete"
+            tone="warn"
+            jobs={outcomeJobs.incomplete}
+            emptyText="No incomplete application attempts were recorded for this run."
+          />
+        </div>
+      </Card>
+
       {timingEntries.length > 0 ? (
         <Card>
           <SectionTitle
@@ -177,24 +262,28 @@ export function ArtifactDetailsSection({ artifact }: { artifact: ArtifactSummary
 
       {details ? (
         <Card>
-          <SectionTitle
-            eyebrow="Diagnostics"
-            title="Run details"
-            subtitle="Signals captured by the engine around metrics, discovery, and site feedback."
-          />
-          <div className="mt-5 space-y-5">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <SectionTitle
+              eyebrow="Diagnostics"
+              title="Run details"
+              subtitle="Compact engine metadata for this run."
+            />
+          </div>
+          <div className="mt-4 space-y-3">
             {details.metrics ? (
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="flex flex-wrap gap-2">
                 {Object.entries(details.metrics).map(([key, value]) => (
-                  <div key={key} className="rounded-2xl border border-line bg-panelSoft/80 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">{key}</p>
-                    <p className="mt-2 text-sm text-text">{String(value)}</p>
-                  </div>
+                  <span
+                    key={key}
+                    className="rounded-full border border-line bg-panelSoft/80 px-3 py-1.5 text-xs text-muted"
+                  >
+                    <span className="text-slate-200">{key}</span>: {String(value)}
+                  </span>
                 ))}
               </div>
             ) : null}
 
-            <div className="space-y-3 rounded-2xl border border-line/70 bg-panelSoft/70 p-4">
+            <div className="grid gap-x-4 gap-y-2 rounded-2xl border border-line/70 bg-panelSoft/70 p-3 md:grid-cols-2">
               <DetailRow label="External URL" value={details.externalApplyUrl} />
               <DetailRow label="External Detected By" value={details.externalDetectedBy?.join(" | ") ?? null} />
               <DetailRow
@@ -209,11 +298,11 @@ export function ArtifactDetailsSection({ artifact }: { artifact: ArtifactSummary
             {details.keyEvents?.length ? (
               <div className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted">Key Events</p>
-                <div className="space-y-2">
+                <div className="grid gap-2 md:grid-cols-2">
                   {details.keyEvents.map((event, index) => (
                     <div
                       key={`${artifact.id}-event-${index}`}
-                      className="rounded-xl border border-line/70 bg-panelSoft/70 p-3 text-sm text-text"
+                      className="rounded-xl border border-line/70 bg-panelSoft/70 p-2.5 text-xs leading-5 text-text"
                     >
                       {event}
                     </div>

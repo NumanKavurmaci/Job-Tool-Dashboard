@@ -73,6 +73,46 @@ describe("engine artifacts", () => {
     fs.writeFileSync(
       jsonPath,
       JSON.stringify({
+        result: {
+          jobs: [
+            {
+              url: "https://www.linkedin.com/jobs/view/1",
+              evaluation: {
+                shouldApply: true,
+                finalDecision: "APPLY",
+                score: 88,
+                reason: "Strong match.",
+                diagnostics: {
+                  title: "Backend Engineer",
+                  company: "Acme",
+                  location: "Remote",
+                },
+              },
+              result: {
+                status: "submitted",
+                stopReason: "Application submitted successfully.",
+              },
+            },
+            {
+              url: "https://www.linkedin.com/jobs/view/2",
+              evaluation: {
+                shouldApply: true,
+                finalDecision: "APPLY",
+                score: 72,
+                reason: "Good match.",
+                diagnostics: {
+                  title: "Frontend Engineer",
+                  company: "Beta",
+                  location: "Hybrid",
+                },
+              },
+              result: {
+                status: "failed",
+                stopReason: "Validation blocked submission.",
+              },
+            },
+          ],
+        },
         meta: {
           durationMs: 1234,
           timings: {
@@ -101,6 +141,54 @@ describe("engine artifacts", () => {
         avgMs: 450,
         maxMs: 700,
       },
+    });
+    expect(timedArtifact?.details?.outcomeJobs).toEqual({
+      recommended: [
+        {
+          url: "https://www.linkedin.com/jobs/view/1",
+          title: "Backend Engineer",
+          company: "Acme",
+          location: "Remote",
+          score: 88,
+          decision: "APPLY",
+          status: "submitted",
+          reason: "Strong match.",
+        },
+        {
+          url: "https://www.linkedin.com/jobs/view/2",
+          title: "Frontend Engineer",
+          company: "Beta",
+          location: "Hybrid",
+          score: 72,
+          decision: "APPLY",
+          status: "failed",
+          reason: "Good match.",
+        },
+      ],
+      applied: [
+        {
+          url: "https://www.linkedin.com/jobs/view/1",
+          title: "Backend Engineer",
+          company: "Acme",
+          location: "Remote",
+          score: 88,
+          decision: "APPLY",
+          status: "submitted",
+          reason: "Strong match.",
+        },
+      ],
+      incomplete: [
+        {
+          url: "https://www.linkedin.com/jobs/view/2",
+          title: "Frontend Engineer",
+          company: "Beta",
+          location: "Hybrid",
+          score: 72,
+          decision: "APPLY",
+          status: "failed",
+          reason: "Good match.",
+        },
+      ],
     });
   });
 

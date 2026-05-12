@@ -20,6 +20,44 @@ function createArtifact(overrides: Partial<ArtifactSummary> = {}): ArtifactSumma
       status: "completed",
       durationMs: 90_000,
       runSummary: "Explore batch evaluated 24 jobs.",
+      outcomeJobs: {
+        recommended: [
+          {
+            url: "https://www.linkedin.com/jobs/view/1",
+            title: "Backend Engineer",
+            company: "Acme",
+            location: "Remote",
+            score: 88,
+            decision: "APPLY",
+            status: null,
+            reason: "Strong match.",
+          },
+        ],
+        applied: [
+          {
+            url: "https://www.linkedin.com/jobs/view/2",
+            title: "Full Stack Engineer",
+            company: "Beta",
+            location: "Remote",
+            score: 80,
+            decision: "APPLY",
+            status: "submitted",
+            reason: "Application submitted successfully.",
+          },
+        ],
+        incomplete: [
+          {
+            url: "https://www.linkedin.com/jobs/view/3",
+            title: "Frontend Engineer",
+            company: "Gamma",
+            location: "Hybrid",
+            score: 74,
+            decision: "APPLY",
+            status: "failed",
+            reason: "Validation blocked submission.",
+          },
+        ],
+      },
       timings: {
         "job.evaluate": {
           count: 24,
@@ -54,6 +92,13 @@ describe("ArtifactsSection", () => {
   it("renders timing diagnostics on the detail view", () => {
     const html = renderToStaticMarkup(<ArtifactDetailsSection artifact={createArtifact()} />);
 
+    expect(html).toContain("Run outcomes");
+    expect(html).toContain("Recommended");
+    expect(html).toContain("Applied");
+    expect(html).toContain("Tried but incomplete");
+    expect(html).toContain("Backend Engineer");
+    expect(html).toContain("Full Stack Engineer");
+    expect(html).toContain("Frontend Engineer");
     expect(html).toContain("Run details");
     expect(html).toContain("Slowest run steps");
     expect(html).toContain("job.evaluate");
