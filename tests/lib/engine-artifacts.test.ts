@@ -2,7 +2,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { readArtifactPreview, readRecentArtifacts } from "@/lib/engine-artifacts";
+import {
+  buildArtifactId,
+  readArtifactById,
+  readArtifactPreview,
+  readRecentArtifacts,
+} from "@/lib/engine-artifacts";
 
 describe("engine artifacts", () => {
   let tempRoot: string;
@@ -41,6 +46,7 @@ describe("engine artifacts", () => {
 
     expect(artifacts).toHaveLength(2);
     expect(artifacts[0]?.name).toBe("newer.png");
+    expect(artifacts[0]?.id).toBe(buildArtifactId("screenshots", "newer.png"));
     expect(artifacts[0]?.category).toBe("screenshots");
     expect(artifacts[1]?.name).toBe("older.json");
     expect(artifacts[1]?.category).toBe("batch-runs");
@@ -96,5 +102,25 @@ describe("engine artifacts", () => {
         maxMs: 700,
       },
     });
+  });
+
+  it("loads a single artifact by stable id", () => {
+    const reportPath = path.join(tempRoot, "artifacts", "batch-runs", "report.json");
+    fs.writeFileSync(reportPath, JSON.stringify({ meta: { summary: "Run finished." } }));
+
+    const artifact = readArtifactById(buildArtifactId("batch-runs", "report.json"));
+
+    expect(artifact).toMatchObject({
+      id: buildArtifactId("batch-runs", "report.json"),
+      name: "report.json",
+      category: "batch-runs",
+      fullPath: reportPath,
+    });
+    expect(artifact?.details?.runSummary).toBe("Run finished.");
+  });
+
+  it("returns null for unknown artifact ids", () => {
+    expect(readArtifactById("not-a-real-id")).toBeNull();
+    expect(readArtifactById(buildArtifactId("unknown", "report.json"))).toBeNull();
   });
 });

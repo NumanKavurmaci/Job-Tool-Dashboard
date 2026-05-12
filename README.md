@@ -42,7 +42,8 @@ If `ENGINE_ROOT` is not set, the dashboard falls back to a sibling `../Job Tool`
 - `/reviews` review history from `JobReviewHistory`
 - `/decisions` detailed application decisions
 - `/answers` prepared Easy Apply answer sets and reusable answer memory
-- `/artifacts` recent artifacts and previews
+- `/artifacts` compact run index for recent generated artifacts
+- `/artifacts/[id]` individual run diagnostics with timings, metrics, events, and raw previews
 - `/companies` firm-level aggregates, logos, LinkedIn URLs, and linked decisions
 
 ## 🚀 Setup

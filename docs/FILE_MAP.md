@@ -32,7 +32,9 @@
 - [app/answers/page.tsx](../app/answers/page.tsx)
   - Easy Apply survey answers and answer memory page
 - [app/artifacts/page.tsx](../app/artifacts/page.tsx)
-  - artifacts listing page
+  - compact artifact/run index page
+- [app/artifacts/[id]/page.tsx](../app/artifacts/%5Bid%5D/page.tsx)
+  - individual artifact/run diagnostics page
 - [app/companies/page.tsx](../app/companies/page.tsx)
   - firm-level aggregate view
 
@@ -63,7 +65,7 @@
 - [src/components/dashboard/answers-section.tsx](../src/components/dashboard/answers-section.tsx)
   - prepared answer sets and cached answer memory
 - [src/components/dashboard/artifacts-section.tsx](../src/components/dashboard/artifacts-section.tsx)
-  - artifact rows and previews
+  - artifact run index rows and individual run detail sections
 - [src/components/dashboard/firms-section.tsx](../src/components/dashboard/firms-section.tsx)
   - company cards with logo, LinkedIn URL, counts, and decision links
 - [src/components/dashboard/logs-section.tsx](../src/components/dashboard/logs-section.tsx)
@@ -80,7 +82,7 @@
 - [lib/engine-db.ts](../lib/engine-db.ts)
   - read-only SQLite queries into engine tables, including grouped search helpers and explore recommendations
 - [lib/engine-artifacts.ts](../lib/engine-artifacts.ts)
-  - file-system reads for recent artifacts, previews, and run timing metadata
+  - file-system reads for recent artifacts, artifact id lookup, previews, and run timing metadata
 - [lib/dashboard-data.ts](../lib/dashboard-data.ts)
   - compatibility composition helper and shared dashboard data type; most pages use narrower readers directly
 
