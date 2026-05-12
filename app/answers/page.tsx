@@ -1,12 +1,13 @@
 import { AnswersSection } from "@/components/dashboard/answers-section";
 import { PageIntro } from "@/components/dashboard/page-intro";
 import { PageShell } from "@/components/dashboard/page-shell";
-import { getDashboardData } from "@/lib/dashboard-data";
+import { readAnswerCache, readPreparedAnswerSets } from "@/lib/engine-db";
 
 export const dynamic = "force-dynamic";
 
 export default function AnswersPage() {
-  const data = getDashboardData();
+  const preparedAnswerSets = readPreparedAnswerSets();
+  const answerCache = readAnswerCache();
 
   return (
     <PageShell>
@@ -16,8 +17,8 @@ export default function AnswersPage() {
         subtitle="Track what the engine produced for Easy Apply surveys, and inspect the cached answers it can reuse for repeated questions."
       />
       <AnswersSection
-        preparedAnswerSets={data.preparedAnswerSets}
-        answerCache={data.answerCache}
+        preparedAnswerSets={preparedAnswerSets}
+        answerCache={answerCache}
       />
     </PageShell>
   );

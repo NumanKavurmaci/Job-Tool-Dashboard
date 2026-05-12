@@ -80,9 +80,9 @@
 - [lib/engine-db.ts](../lib/engine-db.ts)
   - read-only SQLite queries into engine tables, including grouped search helpers and explore recommendations
 - [lib/engine-artifacts.ts](../lib/engine-artifacts.ts)
-  - file-system reads for recent artifacts and previews
+  - file-system reads for recent artifacts, previews, and run timing metadata
 - [lib/dashboard-data.ts](../lib/dashboard-data.ts)
-  - composition layer that builds one dashboard data object for the pages
+  - compatibility composition helper and shared dashboard data type; most pages use narrower readers directly
 
 ## Tests
 

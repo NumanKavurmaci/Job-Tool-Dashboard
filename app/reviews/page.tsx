@@ -1,12 +1,12 @@
 import { PageIntro } from "@/components/dashboard/page-intro";
 import { PageShell } from "@/components/dashboard/page-shell";
 import { ReviewsSection } from "@/components/dashboard/reviews-section";
-import { getDashboardData } from "@/lib/dashboard-data";
+import { readRecentReviews } from "@/lib/engine-db";
 
 export const dynamic = "force-dynamic";
 
 export default function ReviewsPage() {
-  const data = getDashboardData();
+  const reviews = readRecentReviews();
 
   return (
     <PageShell>
@@ -15,7 +15,7 @@ export default function ReviewsPage() {
         title="Decision history across reviewed job offers."
         subtitle="Inspect the latest evaluations, scores, thresholds, and the reasons the engine recorded for apply, skip, or incomplete outcomes."
       />
-      <ReviewsSection reviews={data.reviews} />
+      <ReviewsSection reviews={reviews} />
     </PageShell>
   );
 }

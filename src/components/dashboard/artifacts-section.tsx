@@ -17,6 +17,10 @@ function DetailRow({
   );
 }
 
+function formatMs(value: number) {
+  return `${Math.round(value)} ms`;
+}
+
 export function ArtifactsSection({ artifacts }: Pick<DashboardData, "artifacts">) {
   return (
     <Card>
@@ -113,6 +117,32 @@ export function ArtifactsSection({ artifacts }: Pick<DashboardData, "artifacts">
                           <p className="mt-1 text-sm text-text">{String(value)}</p>
                         </div>
                       ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {artifact.details.timings ? (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted">
+                      Timings
+                    </p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {Object.entries(artifact.details.timings)
+                        .sort(([, left], [, right]) => right.totalMs - left.totalMs)
+                        .map(([key, timing]) => (
+                          <div
+                            key={`${artifact.fullPath}-timing-${key}`}
+                            className="rounded-xl border border-line/70 bg-panelSoft/70 p-3"
+                          >
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">
+                              {key}
+                            </p>
+                            <p className="mt-1 text-sm text-text">{formatMs(timing.totalMs)} total</p>
+                            <p className="mt-1 text-xs text-muted">
+                              {timing.count}x / avg {formatMs(timing.avgMs)} / max {formatMs(timing.maxMs)}
+                            </p>
+                          </div>
+                        ))}
                     </div>
                   </div>
                 ) : null}

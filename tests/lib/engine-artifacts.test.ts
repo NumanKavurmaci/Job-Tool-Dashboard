@@ -60,4 +60,41 @@ describe("engine artifacts", () => {
     expect(jsonArtifact && readArtifactPreview(jsonArtifact)).toContain('"decision":"SKIP"');
     expect(pngArtifact && readArtifactPreview(pngArtifact)).toBeNull();
   });
+
+  it("parses run timing summaries from artifact metadata", () => {
+    const jsonPath = path.join(tempRoot, "artifacts", "batch-runs", "timed.json");
+
+    fs.writeFileSync(
+      jsonPath,
+      JSON.stringify({
+        meta: {
+          durationMs: 1234,
+          timings: {
+            "job.evaluate": {
+              count: 2,
+              totalMs: 900,
+              avgMs: 450,
+              maxMs: 700,
+            },
+            invalid: {
+              count: "nope",
+            },
+          },
+        },
+      }),
+    );
+
+    const artifacts = readRecentArtifacts(10);
+    const timedArtifact = artifacts.find((artifact) => artifact.name === "timed.json");
+
+    expect(timedArtifact?.details?.durationMs).toBe(1234);
+    expect(timedArtifact?.details?.timings).toEqual({
+      "job.evaluate": {
+        count: 2,
+        totalMs: 900,
+        avgMs: 450,
+        maxMs: 700,
+      },
+    });
+  });
 });

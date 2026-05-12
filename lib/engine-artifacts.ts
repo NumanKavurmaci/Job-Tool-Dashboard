@@ -2,12 +2,21 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { getEngineArtifactsPath } from "./engine-paths";
 
-type ParsedArtifactDetails = {
+export type ParsedArtifactDetails = {
   mode?: string | null;
   status?: string | null;
   stopReason?: string | null;
   finalStage?: string | null;
   durationMs?: number | null;
+  timings?: Record<
+    string,
+    {
+      count: number;
+      totalMs: number;
+      avgMs: number;
+      maxMs: number;
+    }
+  > | null;
   runSummary?: string | null;
   keyEvents?: string[] | null;
   metrics?: Record<string, string | number | boolean | null> | null;
@@ -26,6 +35,7 @@ type ParsedArtifactDetails = {
 };
 
 export type ArtifactSummary = {
+  id: string;
   name: string;
   category: string;
   fullPath: string;
@@ -34,6 +44,28 @@ export type ArtifactSummary = {
   preview: string | null;
   details: ParsedArtifactDetails | null;
 };
+
+const ARTIFACT_CATEGORIES = ["batch-runs", "easy-apply-runs", "external-apply-runs", "screenshots"];
+
+export function buildArtifactId(category: string, name: string): string {
+  return `${encodeURIComponent(category)}--${encodeURIComponent(name)}`;
+}
+
+function parseArtifactId(id: string): { category: string; name: string } | null {
+  const separator = id.indexOf("--");
+  if (separator <= 0 || separator >= id.length - 2) {
+    return null;
+  }
+
+  try {
+    return {
+      category: decodeURIComponent(id.slice(0, separator)),
+      name: decodeURIComponent(id.slice(separator + 2)),
+    };
+  } catch {
+    return null;
+  }
+}
 
 function readJsonArtifact(fullPath: string): unknown | null {
   try {
@@ -59,6 +91,37 @@ function normalizeSiteFeedbackMessages(value: unknown): string[] {
     ...(Array.isArray(record.warnings) ? record.warnings : []),
     ...(Array.isArray(record.infos) ? record.infos : []),
   ].filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+}
+
+function normalizeTimings(value: unknown): ParsedArtifactDetails["timings"] {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>)
+    .map(([name, timing]) => {
+      if (!timing || typeof timing !== "object") {
+        return null;
+      }
+
+      const record = timing as Record<string, unknown>;
+      const count = typeof record.count === "number" ? record.count : null;
+      const totalMs = typeof record.totalMs === "number" ? record.totalMs : null;
+      const avgMs = typeof record.avgMs === "number" ? record.avgMs : null;
+      const maxMs = typeof record.maxMs === "number" ? record.maxMs : null;
+
+      if (count == null || totalMs == null || avgMs == null || maxMs == null) {
+        return null;
+      }
+
+      return [name, { count, totalMs, avgMs, maxMs }] as const;
+    })
+    .filter((entry): entry is readonly [
+      string,
+      { count: number; totalMs: number; avgMs: number; maxMs: number },
+    ] => entry !== null);
+
+  return entries.length > 0 ? Object.fromEntries(entries) : null;
 }
 
 function parseArtifactDetails(payload: unknown): ParsedArtifactDetails | null {
@@ -155,6 +218,7 @@ function parseArtifactDetails(payload: unknown): ParsedArtifactDetails | null {
           : null,
     durationMs:
       typeof metaRecord?.durationMs === "number" ? (metaRecord.durationMs as number) : null,
+    timings: normalizeTimings(metaRecord?.timings),
     runSummary:
       typeof metaRecord?.summary === "string" ? (metaRecord.summary as string) : null,
     keyEvents: Array.isArray(metaRecord?.keyEvents)
@@ -195,10 +259,9 @@ function parseArtifactDetails(payload: unknown): ParsedArtifactDetails | null {
 
 export function readRecentArtifacts(limit = 12): ArtifactSummary[] {
   const base = getEngineArtifactsPath();
-  const categories = ["batch-runs", "easy-apply-runs", "external-apply-runs", "screenshots"];
   const rows: ArtifactSummary[] = [];
 
-  for (const category of categories) {
+  for (const category of ARTIFACT_CATEGORIES) {
     const dir = path.join(base, category);
     try {
       const files = readdirSync(dir);
@@ -220,6 +283,7 @@ export function readRecentArtifacts(limit = 12): ArtifactSummary[] {
             : null;
 
         rows.push({
+          id: buildArtifactId(category, file),
           name: file,
           category,
           fullPath,
@@ -237,6 +301,47 @@ export function readRecentArtifacts(limit = 12): ArtifactSummary[] {
   return rows
     .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
     .slice(0, limit);
+}
+
+export function readArtifactById(id: string): ArtifactSummary | null {
+  const parsed = parseArtifactId(id);
+  if (!parsed || !ARTIFACT_CATEGORIES.includes(parsed.category)) {
+    return null;
+  }
+
+  const fullPath = path.join(getEngineArtifactsPath(), parsed.category, parsed.name);
+
+  try {
+    const stat = statSync(fullPath);
+    if (!stat.isFile()) {
+      return null;
+    }
+
+    const payload = parsed.name.endsWith(".json") ? readJsonArtifact(fullPath) : null;
+    const preview =
+      parsed.name.endsWith(".json")
+        ? (() => {
+            try {
+              return readFileSync(fullPath, "utf8").slice(0, 1200);
+            } catch {
+              return null;
+            }
+          })()
+        : null;
+
+    return {
+      id,
+      name: parsed.name,
+      category: parsed.category,
+      fullPath,
+      updatedAt: stat.mtime.toISOString(),
+      size: stat.size,
+      preview,
+      details: payload ? parseArtifactDetails(payload) : null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function readArtifactPreview(summary: ArtifactSummary): string | null {
