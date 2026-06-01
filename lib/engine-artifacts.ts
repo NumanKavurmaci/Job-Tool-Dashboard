@@ -32,11 +32,34 @@ export type ParsedArtifactDetails = {
     validationFeedback: string;
     finalFeedback?: string | null;
   }> | null;
+  recovery?: RecoveryMetadata | null;
+  unknownActionDiagnostics?: UnknownActionDiagnostics | null;
   outcomeJobs?: {
     recommended: RunOutcomeJob[];
     applied: RunOutcomeJob[];
     incomplete: RunOutcomeJob[];
   };
+};
+
+export type RecoveryMetadata = {
+  failureReasonCode: string | null;
+  retryable: boolean | null;
+  missingProfileData: string[];
+};
+
+export type UnknownActionDiagnostics = {
+  currentUrl: string | null;
+  activeElement: {
+    tagName: string | null;
+    inputType: string | null;
+    role: string | null;
+    ariaLabel: string | null;
+    placeholder: string | null;
+    text: string | null;
+  } | null;
+  visibleButtonLabels: string[];
+  modalHtmlSample: string | null;
+  overlayTextSample: string | null;
 };
 
 export type RunOutcomeJob = {
@@ -48,6 +71,10 @@ export type RunOutcomeJob = {
   decision: string | null;
   status: string | null;
   reason: string | null;
+  failureReasonCode: string | null;
+  retryable: boolean | null;
+  missingProfileData: string[];
+  unknownActionDiagnostics: UnknownActionDiagnostics | null;
 };
 
 export type ArtifactSummary = {
@@ -148,6 +175,84 @@ function numberValue(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function booleanValue(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+function stringArrayValue(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    : [];
+}
+
+function objectValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+}
+
+function readRecoveryMetadata(
+  primaryValue: unknown,
+  fallbackValue?: unknown,
+): RecoveryMetadata | null {
+  const primary = objectValue(primaryValue);
+  const fallback = objectValue(fallbackValue);
+  const failureReasonCode =
+    stringValue(primary?.failureReasonCode) ?? stringValue(fallback?.failureReasonCode);
+  const retryable =
+    booleanValue(primary?.retryable) ?? booleanValue(fallback?.retryable);
+  const primaryMissingProfileData = stringArrayValue(primary?.missingProfileData);
+  const missingProfileData = primaryMissingProfileData.length > 0
+    ? primaryMissingProfileData
+    : stringArrayValue(fallback?.missingProfileData);
+
+  if (!failureReasonCode && retryable == null && missingProfileData.length === 0) {
+    return null;
+  }
+
+  return {
+    failureReasonCode,
+    retryable,
+    missingProfileData,
+  };
+}
+
+function readUnknownActionDiagnostics(value: unknown): UnknownActionDiagnostics | null {
+  const record = objectValue(value);
+  if (!record) {
+    return null;
+  }
+
+  const activeElementRecord = objectValue(record.activeElement);
+  const activeElement = activeElementRecord
+    ? {
+        tagName: stringValue(activeElementRecord.tagName),
+        inputType: stringValue(activeElementRecord.inputType),
+        role: stringValue(activeElementRecord.role),
+        ariaLabel: stringValue(activeElementRecord.ariaLabel),
+        placeholder: stringValue(activeElementRecord.placeholder),
+        text: stringValue(activeElementRecord.text),
+      }
+    : null;
+  const diagnostics = {
+    currentUrl: stringValue(record.currentUrl),
+    activeElement,
+    visibleButtonLabels: stringArrayValue(record.visibleButtonLabels),
+    modalHtmlSample: stringValue(record.modalHtmlSample),
+    overlayTextSample: stringValue(record.overlayTextSample),
+  };
+
+  if (
+    !diagnostics.currentUrl &&
+    !diagnostics.activeElement &&
+    diagnostics.visibleButtonLabels.length === 0 &&
+    !diagnostics.modalHtmlSample &&
+    !diagnostics.overlayTextSample
+  ) {
+    return null;
+  }
+
+  return diagnostics;
+}
+
 function readOutcomeJob(value: unknown): RunOutcomeJob | null {
   if (!value || typeof value !== "object") {
     return null;
@@ -157,7 +262,11 @@ function readOutcomeJob(value: unknown): RunOutcomeJob | null {
   const evaluation = (record.evaluation ?? null) as Record<string, unknown> | null;
   const diagnostics = (evaluation?.diagnostics ?? null) as Record<string, unknown> | null;
   const result = (record.result ?? null) as Record<string, unknown> | null;
+  const externalApplication = objectValue(result?.externalApplication);
+  const recovery = readRecoveryMetadata(result, externalApplication);
   const url = stringValue(record.url) ?? stringValue(result?.url);
+  const status = stringValue(result?.status);
+  const isStoppedAttempt = Boolean(status && !["submitted", "ready_to_submit"].includes(status));
 
   if (!url) {
     return null;
@@ -170,8 +279,17 @@ function readOutcomeJob(value: unknown): RunOutcomeJob | null {
     location: stringValue(diagnostics?.location),
     score: numberValue(evaluation?.score),
     decision: stringValue(evaluation?.finalDecision),
-    status: stringValue(result?.status),
-    reason: stringValue(evaluation?.reason) ?? stringValue(result?.stopReason),
+    status,
+    reason: isStoppedAttempt
+      ? stringValue(externalApplication?.stopReason) ??
+        stringValue(result?.stopReason) ??
+        stringValue(evaluation?.reason)
+      : stringValue(evaluation?.reason) ??
+        stringValue(result?.stopReason),
+    failureReasonCode: recovery?.failureReasonCode ?? null,
+    retryable: recovery?.retryable ?? null,
+    missingProfileData: recovery?.missingProfileData ?? [],
+    unknownActionDiagnostics: readUnknownActionDiagnostics(result?.unknownActionDiagnostics),
   };
 }
 
@@ -229,6 +347,15 @@ function parseArtifactDetails(payload: unknown): ParsedArtifactDetails | null {
   const discoveryRecord = (record.discovery ?? null) as Record<string, unknown> | null;
   const fillResultRecord = (record.fillResult ?? null) as Record<string, unknown> | null;
   const metaRecord = (record.meta ?? null) as Record<string, unknown> | null;
+  const easyApplyExternalApplication = objectValue(easyApplyRecord?.externalApplication);
+  const recovery =
+    readRecoveryMetadata(record) ??
+    readRecoveryMetadata(easyApplyRecord, easyApplyExternalApplication);
+  const unknownActionDiagnostics = readUnknownActionDiagnostics(
+    easyApplyRecord?.unknownActionDiagnostics ??
+      resultRecord?.unknownActionDiagnostics ??
+      record.unknownActionDiagnostics,
+  );
 
   const externalDetectionRecord = (easyApplyRecord?.externalDetection ?? null) as
     | { source?: unknown; signals?: unknown }
@@ -348,6 +475,8 @@ function parseArtifactDetails(payload: unknown): ParsedArtifactDetails | null {
         : null,
     siteFeedback: siteFeedback.length > 0 ? [...new Set(siteFeedback)] : null,
     aiCorrectionAttempts: aiCorrectionAttempts.length > 0 ? aiCorrectionAttempts : null,
+    recovery,
+    unknownActionDiagnostics,
     outcomeJobs: parseOutcomeJobs(resultRecord),
   };
 }

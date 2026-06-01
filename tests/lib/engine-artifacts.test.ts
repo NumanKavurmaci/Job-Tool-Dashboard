@@ -153,6 +153,10 @@ describe("engine artifacts", () => {
           decision: "APPLY",
           status: "submitted",
           reason: "Strong match.",
+          failureReasonCode: null,
+          retryable: null,
+          missingProfileData: [],
+          unknownActionDiagnostics: null,
         },
         {
           url: "https://www.linkedin.com/jobs/view/2",
@@ -162,7 +166,11 @@ describe("engine artifacts", () => {
           score: 72,
           decision: "APPLY",
           status: "failed",
-          reason: "Good match.",
+          reason: "Validation blocked submission.",
+          failureReasonCode: null,
+          retryable: null,
+          missingProfileData: [],
+          unknownActionDiagnostics: null,
         },
       ],
       applied: [
@@ -175,6 +183,10 @@ describe("engine artifacts", () => {
           decision: "APPLY",
           status: "submitted",
           reason: "Strong match.",
+          failureReasonCode: null,
+          retryable: null,
+          missingProfileData: [],
+          unknownActionDiagnostics: null,
         },
       ],
       incomplete: [
@@ -186,9 +198,138 @@ describe("engine artifacts", () => {
           score: 72,
           decision: "APPLY",
           status: "failed",
-          reason: "Good match.",
+          reason: "Validation blocked submission.",
+          failureReasonCode: null,
+          retryable: null,
+          missingProfileData: [],
+          unknownActionDiagnostics: null,
         },
       ],
+    });
+  });
+
+  it("normalizes standalone external recovery metadata", () => {
+    const reportPath = path.join(tempRoot, "artifacts", "batch-runs", "external.json");
+    fs.writeFileSync(
+      reportPath,
+      JSON.stringify({
+        finalStage: "form_step",
+        stopReason: "Required fields remain unanswered.",
+        failureReasonCode: "external.missing_required_answer",
+        retryable: true,
+        missingProfileData: ["availability.noticePeriod", 12, ""],
+      }),
+    );
+
+    const artifact = readArtifactById(buildArtifactId("batch-runs", "external.json"));
+
+    expect(artifact?.details?.recovery).toEqual({
+      failureReasonCode: "external.missing_required_answer",
+      retryable: true,
+      missingProfileData: ["availability.noticePeriod"],
+    });
+  });
+
+  it("normalizes nested batch recovery metadata and prioritizes the operational stop reason", () => {
+    const reportPath = path.join(tempRoot, "artifacts", "batch-runs", "recovery.json");
+    fs.writeFileSync(
+      reportPath,
+      JSON.stringify({
+        result: {
+          jobs: [
+            {
+              url: "https://www.linkedin.com/jobs/view/3",
+              evaluation: {
+                shouldApply: true,
+                finalDecision: "APPLY",
+                score: 74,
+                reason: "Strong scoring match.",
+              },
+              result: {
+                status: "stopped_external_apply",
+                retryable: false,
+                unknownActionDiagnostics: {
+                  overlayTextSample: "Loading application questions...",
+                  visibleButtonLabels: [],
+                },
+                externalApplication: {
+                  stopReason: "Could not submit because notice period is missing.",
+                  failureReasonCode: "external.missing_required_answer",
+                  retryable: true,
+                  missingProfileData: ["availability.noticePeriod"],
+                },
+              },
+            },
+          ],
+        },
+      }),
+    );
+
+    const artifact = readArtifactById(buildArtifactId("batch-runs", "recovery.json"));
+    const incomplete = artifact?.details?.outcomeJobs?.incomplete[0];
+
+    expect(incomplete).toMatchObject({
+      reason: "Could not submit because notice period is missing.",
+      failureReasonCode: "external.missing_required_answer",
+      retryable: false,
+      missingProfileData: ["availability.noticePeriod"],
+      unknownActionDiagnostics: {
+        currentUrl: null,
+        activeElement: null,
+        visibleButtonLabels: [],
+        modalHtmlSample: null,
+        overlayTextSample: "Loading application questions...",
+      },
+    });
+  });
+
+  it("normalizes LinkedIn unknown-action diagnostics", () => {
+    const reportPath = path.join(tempRoot, "artifacts", "batch-runs", "unknown-action.json");
+    fs.writeFileSync(
+      reportPath,
+      JSON.stringify({
+        easyApply: {
+          status: "stopped_unknown_action",
+          failureReasonCode: "linkedin.empty_or_unrecognized_action_state",
+          retryable: true,
+          unknownActionDiagnostics: {
+            currentUrl: "https://www.linkedin.com/jobs/view/4",
+            activeElement: {
+              tagName: "input",
+              inputType: "search",
+              role: "combobox",
+              ariaLabel: "Search",
+              placeholder: "Search",
+              text: "",
+            },
+            visibleButtonLabels: ["Dismiss", 2],
+            modalHtmlSample: "<div>Loading application questions...</div>",
+            overlayTextSample: "Apply to Acme",
+          },
+        },
+      }),
+    );
+
+    const artifact = readArtifactById(buildArtifactId("batch-runs", "unknown-action.json"));
+
+    expect(artifact?.details?.recovery).toEqual({
+      failureReasonCode: "linkedin.empty_or_unrecognized_action_state",
+      retryable: true,
+      missingProfileData: [],
+    });
+    expect(artifact?.details?.unknownActionDiagnostics).toEqual({
+      currentUrl: "https://www.linkedin.com/jobs/view/4",
+      activeElement: {
+        tagName: "input",
+        inputType: "search",
+        role: "combobox",
+        ariaLabel: "Search",
+        placeholder: "Search",
+        text: null,
+      },
+      visibleButtonLabels: ["Dismiss"],
+      modalHtmlSample: "<div>Loading application questions...</div>",
+      overlayTextSample: "Apply to Acme",
     });
   });
 

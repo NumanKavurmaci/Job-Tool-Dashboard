@@ -31,6 +31,10 @@ function createArtifact(overrides: Partial<ArtifactSummary> = {}): ArtifactSumma
             decision: "APPLY",
             status: null,
             reason: "Strong match.",
+            failureReasonCode: null,
+            retryable: null,
+            missingProfileData: [],
+            unknownActionDiagnostics: null,
           },
         ],
         applied: [
@@ -43,6 +47,10 @@ function createArtifact(overrides: Partial<ArtifactSummary> = {}): ArtifactSumma
             decision: "APPLY",
             status: "submitted",
             reason: "Application submitted successfully.",
+            failureReasonCode: null,
+            retryable: null,
+            missingProfileData: [],
+            unknownActionDiagnostics: null,
           },
         ],
         incomplete: [
@@ -55,6 +63,16 @@ function createArtifact(overrides: Partial<ArtifactSummary> = {}): ArtifactSumma
             decision: "APPLY",
             status: "failed",
             reason: "Validation blocked submission.",
+            failureReasonCode: "external.required_field_fill_failed",
+            retryable: true,
+            missingProfileData: ["availability.startDate"],
+            unknownActionDiagnostics: {
+              currentUrl: "https://www.linkedin.com/jobs/view/3",
+              activeElement: null,
+              visibleButtonLabels: [],
+              modalHtmlSample: null,
+              overlayTextSample: "Loading application questions...",
+            },
           },
         ],
       },
@@ -71,6 +89,25 @@ function createArtifact(overrides: Partial<ArtifactSummary> = {}): ArtifactSumma
           avgMs: 200,
           maxMs: 300,
         },
+      },
+      recovery: {
+        failureReasonCode: "external.missing_required_answer",
+        retryable: true,
+        missingProfileData: ["availability.noticePeriod"],
+      },
+      unknownActionDiagnostics: {
+        currentUrl: "https://www.linkedin.com/jobs/view/3",
+        activeElement: {
+          tagName: "input",
+          inputType: "search",
+          role: "combobox",
+          ariaLabel: "Search",
+          placeholder: "Search",
+          text: null,
+        },
+        visibleButtonLabels: ["Dismiss"],
+        modalHtmlSample: "<div>Loading application questions...</div>",
+        overlayTextSample: "Apply to Gamma",
       },
     },
     ...overrides,
@@ -104,6 +141,15 @@ describe("ArtifactsSection", () => {
     expect(html).toContain("job.evaluate");
     expect(html).toContain("1.0 min total");
     expect(html).toContain("24x / avg 2.5 s / max 5.0 s");
+    expect(html).toContain("external.required_field_fill_failed");
+    expect(html).toContain("external.missing_required_answer");
+    expect(html).toContain("Retryable");
+    expect(html).toContain("availability.startDate");
+    expect(html).toContain("availability.noticePeriod");
+    expect(html).toContain("Unknown action context");
+    expect(html).toContain("Unknown action diagnostics");
+    expect(html).toContain("Loading application questions...");
+    expect(html).toContain("Apply to Gamma");
     expect(html).toContain("Raw JSON preview");
   });
 });

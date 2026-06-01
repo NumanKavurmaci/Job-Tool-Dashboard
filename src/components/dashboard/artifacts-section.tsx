@@ -88,8 +88,24 @@ function JobOutcomeList({
               <div className="mt-2 flex flex-wrap gap-2">
                 {job.decision ? <Badge tone={job.decision === "APPLY" ? "apply" : "skip"}>{job.decision}</Badge> : null}
                 {job.status ? <Badge tone={statusTone(job.status)}>{job.status}</Badge> : null}
+                {job.failureReasonCode ? <Badge tone="warn">{job.failureReasonCode}</Badge> : null}
+                {job.retryable === true ? <Badge tone="info">Retryable</Badge> : null}
               </div>
               {job.reason ? <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted">{job.reason}</p> : null}
+              {job.missingProfileData.length > 0 ? (
+                <p className="mt-2 text-xs leading-5 text-amber-200">
+                  Missing profile data: {job.missingProfileData.join(", ")}
+                </p>
+              ) : null}
+              {job.unknownActionDiagnostics ? (
+                <p className="mt-2 line-clamp-2 text-xs leading-5 text-blue-200">
+                  Unknown action context:{" "}
+                  {(job.unknownActionDiagnostics.overlayTextSample ??
+                    job.unknownActionDiagnostics.modalHtmlSample ??
+                    job.unknownActionDiagnostics.visibleButtonLabels.join(" | ")) ||
+                    "Captured for this attempt."}
+                </p>
+              ) : null}
             </a>
           ))}
         </div>
@@ -165,6 +181,19 @@ export function ArtifactDetailsSection({ artifact }: { artifact: ArtifactSummary
     applied: [],
     incomplete: [],
   };
+  const recovery = details?.recovery;
+  const unknownActionDiagnostics = details?.unknownActionDiagnostics;
+  const activeElement = unknownActionDiagnostics?.activeElement;
+  const activeElementSummary = activeElement
+    ? [
+        activeElement.tagName,
+        activeElement.inputType,
+        activeElement.role ? `role=${activeElement.role}` : null,
+        activeElement.ariaLabel ? `aria-label=${activeElement.ariaLabel}` : null,
+        activeElement.placeholder ? `placeholder=${activeElement.placeholder}` : null,
+        activeElement.text ? `text=${activeElement.text}` : null,
+      ].filter(Boolean).join(" | ")
+    : null;
 
   return (
     <div className="space-y-6">
@@ -293,6 +322,12 @@ export function ArtifactDetailsSection({ artifact }: { artifact: ArtifactSummary
               <DetailRow label="Precursor Signals" value={details.precursorSignals?.join(" | ") ?? null} />
               <DetailRow label="Followed Precursor Link" value={details.followedPrecursorLink} />
               <DetailRow label="Site Feedback" value={details.siteFeedback?.join(" | ") ?? null} />
+              <DetailRow label="Failure Code" value={recovery?.failureReasonCode} />
+              <DetailRow
+                label="Retryable"
+                value={recovery?.retryable == null ? null : recovery.retryable ? "Yes" : "No"}
+              />
+              <DetailRow label="Missing Profile Data" value={recovery?.missingProfileData.join(" | ") ?? null} />
             </div>
 
             {details.keyEvents?.length ? (
@@ -332,6 +367,42 @@ export function ArtifactDetailsSection({ artifact }: { artifact: ArtifactSummary
                     </div>
                   ))}
                 </div>
+              </div>
+            ) : null}
+
+            {unknownActionDiagnostics ? (
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted">
+                  Unknown action diagnostics
+                </p>
+                <div className="grid gap-x-4 gap-y-2 rounded-2xl border border-line/70 bg-panelSoft/70 p-3 md:grid-cols-2">
+                  <DetailRow label="Current URL" value={unknownActionDiagnostics.currentUrl} />
+                  <DetailRow label="Active Element" value={activeElementSummary} />
+                  <DetailRow
+                    label="Visible Buttons"
+                    value={unknownActionDiagnostics.visibleButtonLabels.join(" | ") || null}
+                  />
+                </div>
+                {unknownActionDiagnostics.modalHtmlSample ? (
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted">
+                      Modal HTML sample
+                    </p>
+                    <pre className="max-h-52 overflow-auto rounded-xl border border-line/70 bg-slate-950/50 p-3 text-xs text-muted">
+                      {unknownActionDiagnostics.modalHtmlSample}
+                    </pre>
+                  </div>
+                ) : null}
+                {unknownActionDiagnostics.overlayTextSample ? (
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted">
+                      Overlay text sample
+                    </p>
+                    <pre className="max-h-52 overflow-auto rounded-xl border border-line/70 bg-slate-950/50 p-3 text-xs text-muted">
+                      {unknownActionDiagnostics.overlayTextSample}
+                    </pre>
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </div>

@@ -147,6 +147,22 @@ describe("run config", () => {
     ]);
   });
 
+  it("builds resume-incomplete args with an optional batch report path", () => {
+    expect(buildRunArgs("resume-incomplete", {})).toEqual([
+      "resume-incomplete",
+    ]);
+
+    expect(
+      buildRunArgs("resume-incomplete", {
+        reportPath: "./artifacts/batch-runs/latest-apply-batch.json",
+      }),
+    ).toEqual([
+      "resume-incomplete",
+      "--report",
+      "./artifacts/batch-runs/latest-apply-batch.json",
+    ]);
+  });
+
   it("throws when required values are missing", () => {
     expect(() => buildRunArgs("score", {})).toThrow("Job URL is required.");
     expect(() => buildRunArgs("easy-apply", {})).toThrow("Job URL is required.");
@@ -189,5 +205,17 @@ describe("run config", () => {
     ]);
 
     expect(script).toContain("'C:\\\\Users\\\\numan\\\\O\\'Reilly\\\\resume.pdf'");
+  });
+
+  it("builds a quoted PowerShell wrapper for resume-incomplete reports", () => {
+    const script = buildGeneratedRunScript([
+      "resume-incomplete",
+      "--report",
+      "C:\\Job Tool\\artifacts\\batch-runs\\latest-apply-batch.json",
+    ]);
+
+    expect(script).toContain(
+      "await main(['resume-incomplete', '--report', 'C:\\\\Job Tool\\\\artifacts\\\\batch-runs\\\\latest-apply-batch.json'], appDeps);",
+    );
   });
 });

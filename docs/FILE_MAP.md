@@ -57,7 +57,7 @@
 - [src/components/dashboard/recommendations-section.tsx](../src/components/dashboard/recommendations-section.tsx)
   - recommendation cards for explore-mode suggested jobs
 - [src/components/dashboard/run-script-builder.tsx](../src/components/dashboard/run-script-builder.tsx)
-  - client-side script generator with dynamic options form and copyable PowerShell output
+  - client-side script generator with dynamic options form, incomplete-apply recovery scripts, and copyable PowerShell output
 - [src/components/dashboard/reviews-section.tsx](../src/components/dashboard/reviews-section.tsx)
   - review history table
 - [src/components/dashboard/decisions-section.tsx](../src/components/dashboard/decisions-section.tsx)
@@ -65,7 +65,7 @@
 - [src/components/dashboard/answers-section.tsx](../src/components/dashboard/answers-section.tsx)
   - prepared answer sets and cached answer memory
 - [src/components/dashboard/artifacts-section.tsx](../src/components/dashboard/artifacts-section.tsx)
-  - artifact run index rows and individual run detail sections
+  - artifact run index rows and individual run detail sections, including recovery and unknown-action diagnostics
 - [src/components/dashboard/firms-section.tsx](../src/components/dashboard/firms-section.tsx)
   - company cards with logo, LinkedIn URL, counts, and decision links
 - [src/components/dashboard/logs-section.tsx](../src/components/dashboard/logs-section.tsx)
@@ -82,7 +82,7 @@
 - [lib/engine-db.ts](../lib/engine-db.ts)
   - read-only SQLite queries into engine tables, including grouped search helpers and explore recommendations
 - [lib/engine-artifacts.ts](../lib/engine-artifacts.ts)
-  - file-system reads for recent artifacts, artifact id lookup, previews, and run timing metadata
+  - file-system reads for recent artifacts, artifact id lookup, previews, run timing metadata, and normalized recovery diagnostics
 - [lib/dashboard-data.ts](../lib/dashboard-data.ts)
   - compatibility composition helper and shared dashboard data type; most pages use narrower readers directly
 
@@ -108,3 +108,5 @@
   - protects firm cards, LinkedIn URL display, and decision links
 - [tests/components/decisions-section.test.tsx](../tests/components/decisions-section.test.tsx)
   - protects detailed decision rendering and empty-state behavior
+- [tests/components/artifacts-section.test.tsx](../tests/components/artifacts-section.test.tsx)
+  - protects artifact detail rendering for run outcomes, recovery metadata, timings, and unknown-action diagnostics

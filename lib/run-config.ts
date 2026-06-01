@@ -9,6 +9,7 @@ export type RunScriptType =
   | "apply"
   | "apply-batch"
   | "external-apply"
+  | "resume-incomplete"
   | "build-profile"
   | "answer-questions";
 
@@ -334,6 +335,20 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
     ],
   },
   {
+    type: "resume-incomplete",
+    label: "Resume Incomplete",
+    description: "Inspect stopped applications from a batch artifact and list retry candidates.",
+    fields: [
+      {
+        key: "reportPath",
+        label: "Batch Report Path",
+        type: "text",
+        placeholder: "./artifacts/batch-runs/2026-05-29T20-07-53-560Z-apply-batch.json",
+        description: "Leave empty to inspect the latest eligible Easy Apply or Apply batch artifact.",
+      },
+    ],
+  },
+  {
     type: "decide",
     label: "Decide",
     description: "Run a single-job analysis and produce the engine's final decision.",
@@ -599,6 +614,10 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
         args.push("--dry-run");
       }
 
+      return args;
+    }
+    case "resume-incomplete": {
+      pushStringArg(args, "--report", stringValue("reportPath"));
       return args;
     }
     case "build-profile": {
