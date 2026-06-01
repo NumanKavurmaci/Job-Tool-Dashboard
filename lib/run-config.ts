@@ -309,14 +309,14 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
   {
     type: "external-apply",
     label: "External Apply",
-    description: "Run the external application helper flow for a non-LinkedIn application URL.",
+    description: "Run the external application helper flow for a non-LinkedIn application URL, including Workable forms.",
     caution: "Clearing Dry Run allows the engine to continue through the live external apply path.",
     fields: [
       {
         key: "url",
         label: "Application URL",
         type: "text",
-        placeholder: "https://company.example/apply/software-engineer",
+        placeholder: "https://apply.workable.com/company/j/ROLE_ID/apply/?ref=reactjobs.io",
         required: true,
       },
       {
@@ -375,13 +375,13 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
   {
     type: "score",
     label: "Score",
-    description: "Run single-job scoring without converting it into a final decision flow.",
+    description: "Run single-job scoring for a supported detail page, including ReactJobs URLs.",
     fields: [
       {
         key: "url",
         label: "Job URL",
         type: "text",
-        placeholder: "https://www.linkedin.com/jobs/view/4389593314/",
+        placeholder: "https://reactjobs.io/react-jobs/company/8446-senior-frontend-engineer",
         required: true,
       },
       {

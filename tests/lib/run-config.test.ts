@@ -182,6 +182,20 @@ describe("run config", () => {
     );
   });
 
+  it("advertises ReactJobs scoring and Workable external apply examples", () => {
+    const scoreDefinition = getRunScriptDefinition("score");
+    const externalApplyDefinition = getRunScriptDefinition("external-apply");
+
+    expect(scoreDefinition.description).toContain("ReactJobs");
+    expect(scoreDefinition.fields.find((field) => field.key === "url")?.placeholder).toContain(
+      "reactjobs.io/react-jobs/",
+    );
+    expect(externalApplyDefinition.description).toContain("Workable");
+    expect(externalApplyDefinition.fields.find((field) => field.key === "url")?.placeholder).toContain(
+      "apply.workable.com",
+    );
+  });
+
   it("builds a PowerShell wrapper with properly quoted JavaScript string args", () => {
     const script = buildGeneratedRunScript([
       "easy-apply-batch",

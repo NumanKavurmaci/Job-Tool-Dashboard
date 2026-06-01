@@ -7,6 +7,7 @@ export type ParsedArtifactDetails = {
   status?: string | null;
   stopReason?: string | null;
   finalStage?: string | null;
+  platform?: string | null;
   durationMs?: number | null;
   timings?: Record<
     string,
@@ -67,6 +68,7 @@ export type RunOutcomeJob = {
   title: string | null;
   company: string | null;
   location: string | null;
+  platform: string | null;
   score: number | null;
   decision: string | null;
   status: string | null;
@@ -277,6 +279,7 @@ function readOutcomeJob(value: unknown): RunOutcomeJob | null {
     title: stringValue(diagnostics?.title),
     company: stringValue(diagnostics?.company),
     location: stringValue(diagnostics?.location),
+    platform: stringValue(externalApplication?.platform),
     score: numberValue(evaluation?.score),
     decision: stringValue(evaluation?.finalDecision),
     status,
@@ -437,6 +440,10 @@ function parseArtifactDetails(payload: unknown): ParsedArtifactDetails | null {
         : typeof (easyApplyRecord?.externalApplication as { finalStage?: unknown } | null)?.finalStage === "string"
           ? ((easyApplyRecord?.externalApplication as { finalStage: string }).finalStage)
           : null,
+    platform:
+      stringValue(record.platform) ??
+      stringValue(discoveryRecord?.platform) ??
+      stringValue(easyApplyExternalApplication?.platform),
     durationMs:
       typeof metaRecord?.durationMs === "number" ? (metaRecord.durationMs as number) : null,
     timings: normalizeTimings(metaRecord?.timings),

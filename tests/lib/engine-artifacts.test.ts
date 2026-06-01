@@ -149,6 +149,7 @@ describe("engine artifacts", () => {
           title: "Backend Engineer",
           company: "Acme",
           location: "Remote",
+          platform: null,
           score: 88,
           decision: "APPLY",
           status: "submitted",
@@ -163,6 +164,7 @@ describe("engine artifacts", () => {
           title: "Frontend Engineer",
           company: "Beta",
           location: "Hybrid",
+          platform: null,
           score: 72,
           decision: "APPLY",
           status: "failed",
@@ -179,6 +181,7 @@ describe("engine artifacts", () => {
           title: "Backend Engineer",
           company: "Acme",
           location: "Remote",
+          platform: null,
           score: 88,
           decision: "APPLY",
           status: "submitted",
@@ -195,6 +198,7 @@ describe("engine artifacts", () => {
           title: "Frontend Engineer",
           company: "Beta",
           location: "Hybrid",
+          platform: null,
           score: 72,
           decision: "APPLY",
           status: "failed",
@@ -214,6 +218,9 @@ describe("engine artifacts", () => {
       reportPath,
       JSON.stringify({
         finalStage: "form_step",
+        discovery: {
+          platform: "workable",
+        },
         stopReason: "Required fields remain unanswered.",
         failureReasonCode: "external.missing_required_answer",
         retryable: true,
@@ -228,6 +235,7 @@ describe("engine artifacts", () => {
       retryable: true,
       missingProfileData: ["availability.noticePeriod"],
     });
+    expect(artifact?.details?.platform).toBe("workable");
   });
 
   it("normalizes nested batch recovery metadata and prioritizes the operational stop reason", () => {
@@ -253,6 +261,7 @@ describe("engine artifacts", () => {
                   visibleButtonLabels: [],
                 },
                 externalApplication: {
+                  platform: "workable",
                   stopReason: "Could not submit because notice period is missing.",
                   failureReasonCode: "external.missing_required_answer",
                   retryable: true,
@@ -273,6 +282,7 @@ describe("engine artifacts", () => {
       failureReasonCode: "external.missing_required_answer",
       retryable: false,
       missingProfileData: ["availability.noticePeriod"],
+      platform: "workable",
       unknownActionDiagnostics: {
         currentUrl: null,
         activeElement: null,

@@ -18,6 +18,7 @@ function createArtifact(overrides: Partial<ArtifactSummary> = {}): ArtifactSumma
     details: {
       mode: "explore-batch",
       status: "completed",
+      platform: "workable",
       durationMs: 90_000,
       runSummary: "Explore batch evaluated 24 jobs.",
       outcomeJobs: {
@@ -27,6 +28,7 @@ function createArtifact(overrides: Partial<ArtifactSummary> = {}): ArtifactSumma
             title: "Backend Engineer",
             company: "Acme",
             location: "Remote",
+            platform: null,
             score: 88,
             decision: "APPLY",
             status: null,
@@ -43,6 +45,7 @@ function createArtifact(overrides: Partial<ArtifactSummary> = {}): ArtifactSumma
             title: "Full Stack Engineer",
             company: "Beta",
             location: "Remote",
+            platform: null,
             score: 80,
             decision: "APPLY",
             status: "submitted",
@@ -59,6 +62,7 @@ function createArtifact(overrides: Partial<ArtifactSummary> = {}): ArtifactSumma
             title: "Frontend Engineer",
             company: "Gamma",
             location: "Hybrid",
+            platform: "workable",
             score: 74,
             decision: "APPLY",
             status: "failed",
@@ -137,6 +141,7 @@ describe("ArtifactsSection", () => {
     expect(html).toContain("Full Stack Engineer");
     expect(html).toContain("Frontend Engineer");
     expect(html).toContain("Run details");
+    expect(html).toContain("workable");
     expect(html).toContain("Slowest run steps");
     expect(html).toContain("job.evaluate");
     expect(html).toContain("1.0 min total");

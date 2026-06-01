@@ -88,6 +88,7 @@ function JobOutcomeList({
               <div className="mt-2 flex flex-wrap gap-2">
                 {job.decision ? <Badge tone={job.decision === "APPLY" ? "apply" : "skip"}>{job.decision}</Badge> : null}
                 {job.status ? <Badge tone={statusTone(job.status)}>{job.status}</Badge> : null}
+                {job.platform ? <Badge tone="neutral">{job.platform}</Badge> : null}
                 {job.failureReasonCode ? <Badge tone="warn">{job.failureReasonCode}</Badge> : null}
                 {job.retryable === true ? <Badge tone="info">Retryable</Badge> : null}
               </div>
@@ -226,6 +227,7 @@ export function ArtifactDetailsSection({ artifact }: { artifact: ArtifactSummary
         <div className="mt-5 space-y-3 rounded-2xl border border-line/70 bg-panelSoft/70 p-4">
           <DetailRow label="Path" value={artifact.fullPath} />
           <DetailRow label="Mode" value={details?.mode} />
+          <DetailRow label="Platform" value={details?.platform} />
           <DetailRow label="Stop Reason" value={details?.stopReason} />
           <DetailRow label="Final Stage" value={details?.finalStage} />
         </div>

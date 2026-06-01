@@ -10,6 +10,7 @@ It turns engine data into a cleaner, easier-to-browse interface for:
 - 🧾 review history, decisions, answers, and artifacts
 - 🧰 script generation for engine commands
 - incomplete-apply recovery details and retry candidate inspection
+- ReactJobs scoring and Workable external-apply visibility
 
 > Source-available under the [PolyForm Noncommercial 1.0.0](./LICENSE) license. Personal and non-commercial use are allowed. Commercial use is not allowed.
 
@@ -39,12 +40,12 @@ If `ENGINE_ROOT` is not set, the dashboard falls back to a sibling `../Job Tool`
 - `/` overview, summary cards, and quick links
 - `/search` grouped search across major collections
 - `/recommendations` explore-mode recommendations with summaries and scores
-- `/run` ready-to-paste PowerShell `tsx` script generation, including `resume-incomplete`
+- `/run` ready-to-paste PowerShell `tsx` script generation, including `resume-incomplete`, ReactJobs scoring, and Workable external apply
 - `/reviews` review history from `JobReviewHistory`
 - `/decisions` detailed application decisions
 - `/answers` prepared Easy Apply answer sets and reusable answer memory
 - `/artifacts` compact run index for recent generated artifacts
-- `/artifacts/[id]` individual run diagnostics with timings, recovery metadata, unknown-action context, events, and raw previews
+- `/artifacts/[id]` individual run diagnostics with platform labels, timings, recovery metadata, unknown-action context, events, and raw previews
 - `/companies` firm-level aggregates, logos, LinkedIn URLs, and linked decisions
 
 ## 🚀 Setup
@@ -93,6 +94,7 @@ AI-first file maps live here:
 - the dashboard is read-focused by design
 - `/run` generates scripts but does not execute them
 - `/run` can generate `resume-incomplete` scripts for stopped batch-application recovery
+- `/run` includes ReactJobs scoring and Workable external-apply examples
 - `/recommendations` reads `JobRecommendation` rows produced by engine explore mode
 - the dashboard stays separate from the engine repo to keep UI concerns isolated
 
