@@ -88,8 +88,18 @@ export function RunScriptBuilder() {
   const [scriptType, setScriptType] = useState<RunScriptType>("apply-batch");
   const [values, setValues] = useState<RunFormValues>(() => buildInitialValues("apply-batch"));
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const definition = useMemo(() => getRunScriptDefinition(scriptType), [scriptType]);
+  const primaryOptions = useMemo(
+    () => RUN_SCRIPT_DEFINITIONS.filter((option) => option.category === "primary"),
+    [],
+  );
+  const advancedOptions = useMemo(
+    () => RUN_SCRIPT_DEFINITIONS.filter((option) => option.category !== "primary"),
+    [],
+  );
+  const selectedIsAdvanced = definition.category !== "primary";
 
   const generated = useMemo(() => {
     try {
@@ -123,6 +133,16 @@ export function RunScriptBuilder() {
     window.setTimeout(() => setCopyState("idle"), 1800);
   }
 
+  function selectScript(nextType: RunScriptType) {
+    setScriptType(nextType);
+    setValues(buildInitialValues(nextType));
+    setCopyState("idle");
+
+    if (getRunScriptDefinition(nextType).category !== "primary") {
+      setShowAdvanced(true);
+    }
+  }
+
   return (
     <div className="grid gap-6 xl:grid-cols-[380px_minmax(0,1fr)]">
       <Card className="space-y-5">
@@ -132,26 +152,64 @@ export function RunScriptBuilder() {
           subtitle="Pick a CLI command and fill the same flags you would pass in terminal. `easy-apply` stays LinkedIn-only, while `apply` includes all-apply continuation."
         />
 
-        <div className="grid gap-2">
-          {RUN_SCRIPT_DEFINITIONS.map((option) => (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-info">Primary scripts</p>
+            <div className="grid gap-2">
+              {primaryOptions.map((option) => (
+                <button
+                  key={option.type}
+                  className={`rounded-2xl border px-4 py-3 text-left transition ${
+                    option.type === scriptType
+                      ? "border-blue-400 bg-blue-400/10"
+                      : "border-line bg-black/20 hover:border-slate-500"
+                  }`}
+                  type="button"
+                  onClick={() => selectScript(option.type)}
+                >
+                  <p className="text-sm font-medium text-text">{option.label}</p>
+                  <p className="mt-1 text-xs text-muted">{option.description}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-line bg-black/15">
             <button
-              key={option.type}
-              className={`rounded-2xl border px-4 py-3 text-left transition ${
-                option.type === scriptType
-                  ? "border-blue-400 bg-blue-400/10"
-                  : "border-line bg-black/20 hover:border-slate-500"
-              }`}
+              aria-expanded={showAdvanced || selectedIsAdvanced}
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
               type="button"
-              onClick={() => {
-                setScriptType(option.type);
-                setValues(buildInitialValues(option.type));
-                setCopyState("idle");
-              }}
+              onClick={() => setShowAdvanced((current) => !current)}
             >
-              <p className="text-sm font-medium text-text">{option.label}</p>
-              <p className="mt-1 text-xs text-muted">{option.description}</p>
+              <div>
+                <p className="text-sm font-medium text-text">Advanced scripts</p>
+                <p className="mt-1 text-xs text-muted">
+                  One-off utilities, single-run flows, and support commands you use less often.
+                </p>
+              </div>
+              <Badge tone="neutral">{advancedOptions.length}</Badge>
             </button>
-          ))}
+
+            {showAdvanced || selectedIsAdvanced ? (
+              <div className="grid gap-2 border-t border-line px-4 pb-4 pt-2">
+                {advancedOptions.map((option) => (
+                  <button
+                    key={option.type}
+                    className={`rounded-2xl border px-4 py-3 text-left transition ${
+                      option.type === scriptType
+                        ? "border-blue-400 bg-blue-400/10"
+                        : "border-line bg-black/20 hover:border-slate-500"
+                    }`}
+                    type="button"
+                    onClick={() => selectScript(option.type)}
+                  >
+                    <p className="text-sm font-medium text-text">{option.label}</p>
+                    <p className="mt-1 text-xs text-muted">{option.description}</p>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </div>
 
         {definition.caution ? (

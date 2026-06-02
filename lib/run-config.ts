@@ -31,6 +31,7 @@ export type RunScriptDefinition = {
   type: RunScriptType;
   label: string;
   description: string;
+  category?: "primary" | "advanced";
   caution?: string;
   fields: RunFieldDefinition[];
 };
@@ -42,6 +43,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
     type: "dashboard",
     label: "Dashboard Snapshot",
     description: "Print a terminal snapshot from persisted recommendations, reviews, and firm stats.",
+    category: "advanced",
     fields: [
       {
         key: "limit",
@@ -56,6 +58,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
     type: "explore-batch",
     label: "Explore Batch",
     description: "Evaluate LinkedIn collection jobs one by one and save recommendations without entering any apply flow.",
+    category: "primary",
     fields: [
       {
         key: "url",
@@ -102,6 +105,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
     type: "explore",
     label: "Explore Single",
     description: "Evaluate one job URL and save its recommendation snapshot without attempting any application flow.",
+    category: "advanced",
     fields: [
       {
         key: "url",
@@ -126,6 +130,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
     type: "easy-apply",
     label: "Easy Apply",
     description: "Run only the LinkedIn Easy Apply flow for a single job URL.",
+    category: "advanced",
     caution: "Leave Dry Run enabled unless you want the engine to reach the real submit path.",
     fields: [
       {
@@ -155,6 +160,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
     type: "easy-apply-batch",
     label: "Easy Apply Batch",
     description: "Run only the LinkedIn Easy Apply batch flow from a collection URL.",
+    category: "advanced",
     caution: "Clearing Dry Run can trigger real application flow steps in the engine.",
     fields: [
       {
@@ -216,6 +222,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
     label: "Apply",
     description:
       "Run the LinkedIn apply flow for a single job URL, including external-application handoff when needed.",
+    category: "advanced",
     caution:
       "Clearing Dry Run allows the engine to continue through real submit paths, including external apply continuation.",
     fields: [
@@ -248,6 +255,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
     label: "Apply Batch",
     description:
       "Run the LinkedIn apply batch flow from a collection URL, including external-application handoff when needed.",
+    category: "primary",
     caution:
       "This is the all-apply command. Clearing Dry Run can continue into real LinkedIn and external application submits.",
     fields: [
@@ -310,6 +318,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
     type: "external-apply",
     label: "External Apply",
     description: "Run the external application helper flow for a non-LinkedIn application URL, including Workable forms.",
+    category: "advanced",
     caution: "Clearing Dry Run allows the engine to continue through the live external apply path.",
     fields: [
       {
@@ -338,6 +347,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
     type: "resume-incomplete",
     label: "Resume Incomplete",
     description: "Inspect stopped applications from a batch artifact and list retry candidates.",
+    category: "advanced",
     fields: [
       {
         key: "reportPath",
@@ -352,6 +362,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
     type: "decide",
     label: "Decide",
     description: "Run a single-job analysis and produce the engine's final decision.",
+    category: "advanced",
     fields: [
       {
         key: "url",
@@ -376,6 +387,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
     type: "score",
     label: "Score",
     description: "Run single-job scoring for a supported detail page, including ReactJobs URLs.",
+    category: "advanced",
     fields: [
       {
         key: "url",
@@ -400,6 +412,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
     type: "build-profile",
     label: "Build Profile",
     description: "Build the candidate master profile from resume and optional LinkedIn URL.",
+    category: "advanced",
     fields: [
       {
         key: "resumePath",
@@ -421,6 +434,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
     type: "answer-questions",
     label: "Answer Questions",
     description: "Generate prepared answers from a questions JSON file.",
+    category: "advanced",
     fields: [
       {
         key: "resumePath",

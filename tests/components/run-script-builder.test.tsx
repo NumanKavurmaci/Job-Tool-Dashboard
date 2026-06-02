@@ -17,4 +17,14 @@ describe("RunScriptBuilder", () => {
     expect(html).toContain("apply-batch https://www.linkedin.com/jobs/collections/hiring-in-network --count 25 --score-threshold 40 --resume ./user/resume.pdf --dry-run");
     expect(html).toContain("Copy Script");
   });
+
+  it("keeps the common batch flows visible and tucks the rest under advanced scripts", () => {
+    const html = renderToStaticMarkup(<RunScriptBuilder />);
+
+    expect(html).toContain("Primary scripts");
+    expect(html).toContain("Explore Batch");
+    expect(html).toContain("Apply Batch");
+    expect(html).toContain("Advanced scripts");
+    expect(html).not.toContain("Dashboard Snapshot");
+  });
 });
