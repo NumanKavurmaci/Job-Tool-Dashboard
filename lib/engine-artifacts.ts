@@ -263,12 +263,18 @@ function readOutcomeJob(value: unknown): RunOutcomeJob | null {
   const record = value as Record<string, unknown>;
   const evaluation = (record.evaluation ?? null) as Record<string, unknown> | null;
   const diagnostics = (evaluation?.diagnostics ?? null) as Record<string, unknown> | null;
-  const result = (record.result ?? null) as Record<string, unknown> | null;
+  const result =
+    objectValue(record.result) ??
+    objectValue(record.application) ??
+    null;
   const externalApplication = objectValue(result?.externalApplication);
   const recovery = readRecoveryMetadata(result, externalApplication);
   const url = stringValue(record.url) ?? stringValue(result?.url);
-  const status = stringValue(result?.status);
+  const status = stringValue(result?.status) ?? stringValue(record.status);
   const isStoppedAttempt = Boolean(status && !["submitted", "ready_to_submit"].includes(status));
+  const platform =
+    stringValue(externalApplication?.platform) ??
+    stringValue(objectValue(result?.discovery)?.platform);
 
   if (!url) {
     return null;
@@ -276,23 +282,29 @@ function readOutcomeJob(value: unknown): RunOutcomeJob | null {
 
   return {
     url,
-    title: stringValue(diagnostics?.title),
-    company: stringValue(diagnostics?.company),
-    location: stringValue(diagnostics?.location),
-    platform: stringValue(externalApplication?.platform),
+    title: stringValue(diagnostics?.title) ?? stringValue(record.title),
+    company: stringValue(diagnostics?.company) ?? stringValue(record.company),
+    location: stringValue(diagnostics?.location) ?? stringValue(record.location),
+    platform,
     score: numberValue(evaluation?.score),
     decision: stringValue(evaluation?.finalDecision),
     status,
     reason: isStoppedAttempt
       ? stringValue(externalApplication?.stopReason) ??
         stringValue(result?.stopReason) ??
+        stringValue(record.error) ??
+        stringValue(record.stopReason) ??
         stringValue(evaluation?.reason)
       : stringValue(evaluation?.reason) ??
-        stringValue(result?.stopReason),
+        stringValue(result?.stopReason) ??
+        stringValue(record.error) ??
+        stringValue(record.stopReason),
     failureReasonCode: recovery?.failureReasonCode ?? null,
     retryable: recovery?.retryable ?? null,
     missingProfileData: recovery?.missingProfileData ?? [],
-    unknownActionDiagnostics: readUnknownActionDiagnostics(result?.unknownActionDiagnostics),
+    unknownActionDiagnostics: readUnknownActionDiagnostics(
+      result?.unknownActionDiagnostics ?? record.unknownActionDiagnostics,
+    ),
   };
 }
 
@@ -317,7 +329,11 @@ function isSubmittedJob(value: unknown): boolean {
 }
 
 function hasAttemptResult(value: unknown): boolean {
-  return Boolean(value && typeof value === "object" && (value as Record<string, unknown>).result);
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      ((value as Record<string, unknown>).result || (value as Record<string, unknown>).application),
+  );
 }
 
 function parseOutcomeJobs(resultRecord: Record<string, unknown> | null): ParsedArtifactDetails["outcomeJobs"] {
@@ -339,13 +355,46 @@ function parseOutcomeJobs(resultRecord: Record<string, unknown> | null): ParsedA
   };
 }
 
+function readBatchRunSummary(batchRecord: Record<string, unknown> | null): string | null {
+  if (!batchRecord) {
+    return null;
+  }
+
+  const stopReason = stringValue(batchRecord.stopReason);
+  if (stopReason) {
+    return stopReason;
+  }
+
+  const evaluatedCount = numberValue(batchRecord.evaluatedCount);
+  const attemptedCount = numberValue(batchRecord.attemptedCount);
+  const status = stringValue(batchRecord.status);
+
+  if (evaluatedCount == null && attemptedCount == null && !status) {
+    return null;
+  }
+
+  const segments = ["apply-batch"];
+  if (evaluatedCount != null) {
+    segments.push(`evaluated ${evaluatedCount} job(s)`);
+  }
+  if (attemptedCount != null) {
+    segments.push(`attempted ${attemptedCount}`);
+  }
+  if (status) {
+    segments.push(`finished ${status}`);
+  }
+
+  return segments.join(", ") + ".";
+}
+
 function parseArtifactDetails(payload: unknown): ParsedArtifactDetails | null {
   if (!payload || typeof payload !== "object") {
     return null;
   }
 
   const record = payload as Record<string, unknown>;
-  const resultRecord = (record.result ?? null) as Record<string, unknown> | null;
+  const batchRecord = objectValue(record.applyBatch);
+  const resultRecord = objectValue(record.result) ?? batchRecord;
   const easyApplyRecord = (record.easyApply ?? null) as Record<string, unknown> | null;
   const discoveryRecord = (record.discovery ?? null) as Record<string, unknown> | null;
   const fillResultRecord = (record.fillResult ?? null) as Record<string, unknown> | null;
@@ -425,6 +474,8 @@ function parseArtifactDetails(payload: unknown): ParsedArtifactDetails | null {
           ? (easyApplyRecord.status as string)
           : typeof fillResultRecord?.primaryAction === "string"
             ? (fillResultRecord.primaryAction as string)
+            : typeof record.status === "string"
+              ? (record.status as string)
             : null,
     stopReason:
       typeof resultRecord?.stopReason === "string"
@@ -447,8 +498,6 @@ function parseArtifactDetails(payload: unknown): ParsedArtifactDetails | null {
     durationMs:
       typeof metaRecord?.durationMs === "number" ? (metaRecord.durationMs as number) : null,
     timings: normalizeTimings(metaRecord?.timings),
-    runSummary:
-      typeof metaRecord?.summary === "string" ? (metaRecord.summary as string) : null,
     keyEvents: Array.isArray(metaRecord?.keyEvents)
       ? (metaRecord.keyEvents as unknown[]).filter(
           (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
@@ -466,6 +515,8 @@ function parseArtifactDetails(payload: unknown): ParsedArtifactDetails | null {
     externalApplyUrl:
       typeof easyApplyRecord?.externalApplyUrl === "string"
         ? (easyApplyRecord.externalApplyUrl as string)
+        : typeof record.sourceUrl === "string"
+          ? (record.sourceUrl as string)
         : typeof (easyApplyRecord?.externalApplication as { canonicalUrl?: unknown } | null)?.canonicalUrl === "string"
           ? ((easyApplyRecord?.externalApplication as { canonicalUrl: string }).canonicalUrl)
           : null,
@@ -484,6 +535,10 @@ function parseArtifactDetails(payload: unknown): ParsedArtifactDetails | null {
     aiCorrectionAttempts: aiCorrectionAttempts.length > 0 ? aiCorrectionAttempts : null,
     recovery,
     unknownActionDiagnostics,
+    runSummary:
+      typeof metaRecord?.summary === "string"
+        ? (metaRecord.summary as string)
+        : readBatchRunSummary(batchRecord),
     outcomeJobs: parseOutcomeJobs(resultRecord),
   };
 }

@@ -212,6 +212,66 @@ describe("engine artifacts", () => {
     });
   });
 
+  it("parses standalone external-apply artifacts using the live top-level shape", () => {
+    const reportPath = path.join(tempRoot, "artifacts", "external-apply-runs", "external-live.json");
+    fs.mkdirSync(path.dirname(reportPath), { recursive: true });
+    fs.writeFileSync(
+      reportPath,
+      JSON.stringify({
+        mode: "external-apply",
+        sourceUrl: "https://apply.workable.com/acme/j/123/apply",
+        discovery: {
+          platform: "workable",
+          precursorPage: false,
+          precursorSignals: [],
+          followedPrecursorLink: null,
+        },
+        fillResult: {
+          primaryAction: "unknown",
+          siteFeedback: {
+            errors: [],
+            warnings: ["Profile is incomplete."],
+            infos: [],
+          },
+          aiCorrectionAttempts: [],
+        },
+        finalStage: "unknown",
+        stopReason: "No application fields were discovered on the target page.",
+        failureReasonCode: "external.unknown_final_stage",
+        retryable: true,
+        missingProfileData: [],
+        meta: {
+          durationMs: 21565,
+          summary: "external-apply on workable reached unknown after 21565ms.",
+          keyEvents: ["Opened external application source URL."],
+          metrics: {
+            finalStage: "unknown",
+            precursorFollowed: false,
+          },
+        },
+      }),
+    );
+
+    const artifact = readArtifactById(buildArtifactId("external-apply-runs", "external-live.json"));
+
+    expect(artifact?.details).toMatchObject({
+      mode: "external-apply",
+      status: "unknown",
+      platform: "workable",
+      finalStage: "unknown",
+      stopReason: "No application fields were discovered on the target page.",
+      externalApplyUrl: "https://apply.workable.com/acme/j/123/apply",
+      durationMs: 21565,
+      runSummary: "external-apply on workable reached unknown after 21565ms.",
+      siteFeedback: ["Profile is incomplete."],
+      recovery: {
+        failureReasonCode: "external.unknown_final_stage",
+        retryable: true,
+        missingProfileData: [],
+      },
+    });
+  });
+
   it("normalizes standalone external recovery metadata", () => {
     const reportPath = path.join(tempRoot, "artifacts", "batch-runs", "external.json");
     fs.writeFileSync(
@@ -291,6 +351,98 @@ describe("engine artifacts", () => {
         overlayTextSample: "Loading application questions...",
       },
     });
+  });
+
+  it("parses live apply-batch jobs that embed external application artifacts", () => {
+    const reportPath = path.join(tempRoot, "artifacts", "batch-runs", "apply-batch-live.json");
+    fs.writeFileSync(
+      reportPath,
+      JSON.stringify({
+        mode: "apply-batch",
+        applyBatch: {
+          status: "partial",
+          stopReason: "Processed 1 application.",
+          jobs: [
+            {
+              url: "https://reactjobs.io/jobs/1",
+              title: "Senior Fullstack Engineer",
+              company: "Stack Builders",
+              location: "Remote /",
+              status: "processed",
+              evaluation: {
+                shouldApply: true,
+                finalDecision: "APPLY",
+                score: 45,
+                reason: "Score 45 meets the threshold.",
+                diagnostics: {
+                  title: "Senior Fullstack Engineer",
+                  company: "Stack Builders",
+                  location: "Remote /",
+                },
+              },
+              application: {
+                mode: "external-apply",
+                sourceUrl: "https://apply.workable.com/stackbuilders/j/445/apply",
+                discovery: {
+                  platform: "workable",
+                },
+                fillResult: {
+                  primaryAction: "unknown",
+                },
+                finalStage: "unknown",
+                stopReason: "No application fields were discovered on the target page.",
+                failureReasonCode: "external.unknown_final_stage",
+                retryable: true,
+                missingProfileData: [],
+              },
+            },
+          ],
+        },
+      }),
+    );
+
+    const artifact = readArtifactById(buildArtifactId("batch-runs", "apply-batch-live.json"));
+
+    expect(artifact?.details).toMatchObject({
+      mode: "apply-batch",
+      status: "partial",
+      stopReason: "Processed 1 application.",
+      runSummary: "Processed 1 application.",
+    });
+    expect(artifact?.details?.outcomeJobs?.recommended).toEqual([
+      {
+        url: "https://reactjobs.io/jobs/1",
+        title: "Senior Fullstack Engineer",
+        company: "Stack Builders",
+        location: "Remote /",
+        platform: "workable",
+        score: 45,
+        decision: "APPLY",
+        status: "processed",
+        reason: "No application fields were discovered on the target page.",
+        failureReasonCode: "external.unknown_final_stage",
+        retryable: true,
+        missingProfileData: [],
+        unknownActionDiagnostics: null,
+      },
+    ]);
+    expect(artifact?.details?.outcomeJobs?.incomplete).toEqual([
+      {
+        url: "https://reactjobs.io/jobs/1",
+        title: "Senior Fullstack Engineer",
+        company: "Stack Builders",
+        location: "Remote /",
+        platform: "workable",
+        score: 45,
+        decision: "APPLY",
+        status: "processed",
+        reason: "No application fields were discovered on the target page.",
+        failureReasonCode: "external.unknown_final_stage",
+        retryable: true,
+        missingProfileData: [],
+        unknownActionDiagnostics: null,
+      },
+    ]);
   });
 
   it("normalizes LinkedIn unknown-action diagnostics", () => {
