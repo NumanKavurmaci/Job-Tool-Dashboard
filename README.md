@@ -1,105 +1,150 @@
-# Job Tool Dashboard
+# 🎛️ Job Tool Dashboard
 
-🎨 `Job Tool Dashboard` is a read-only Next.js dashboard for the `Job Tool` engine.
+> A local Next.js command center for the Job Tool engine.
 
-It turns engine data into a cleaner, easier-to-browse interface for:
+[![Next.js](https://img.shields.io/badge/Next.js-dashboard-black)](https://nextjs.org/)
+[![React](https://img.shields.io/badge/React-UI-61dafb)](https://react.dev/)
+[![SQLite](https://img.shields.io/badge/SQLite-engine%20data-07405e)](https://sqlite.org/)
+[![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue)](./LICENSE)
 
-- 📊 stats and run summaries
-- 🔎 search across stored job data
-- ⭐ recommendations discovered by explore mode
-- 🧾 review history, decisions, answers, and artifacts
-- 🧰 script generation for engine commands
-- incomplete-apply recovery details and retry candidate inspection
-- ReactJobs scoring and Workable external-apply visibility
+Job Tool Dashboard turns the local `Job Tool` engine workspace into a readable, searchable, and controllable UI. It shows recommendations, review history, decisions, answers, artifacts, companies, logs, and live run progress without moving your personal job data into a hosted service.
 
-> Source-available under the [PolyForm Noncommercial 1.0.0](./LICENSE) license. Personal and non-commercial use are allowed. Commercial use is not allowed.
+## ✨ What It Shows
 
-## ✨ Overview
+| Page | Purpose |
+| --- | --- |
+| `/` | Overview cards, stats, health signals, and quick navigation. |
+| `/run` | Start/stop engine runs, view live progress, inspect current job activity, and copy CLI fallback scripts. |
+| `/recommendations` | Explore-mode recommendations with score, decision, and policy context. |
+| `/reviews` | Job review history from `JobReviewHistory`. |
+| `/decisions` | Detailed application decisions and reason trails. |
+| `/answers` | Prepared answer sets and reusable answer memory. |
+| `/artifacts` | Batch reports, external apply reports, screenshots, and run diagnostics. |
+| `/companies` | Company-level aggregates, logos, LinkedIn URLs, and review counts. |
+| `/search` | Cross-collection search across stored engine data. |
 
-This project reads the existing engine workspace and presents its data through a modern dashboard UI.
+## 🔗 How It Connects To The Engine
 
-It currently reads:
+The dashboard is a separate project, but it binds to the engine through `ENGINE_ROOT`.
 
-- `prisma/dev.db`
-- `logs/app.log`
-- `artifacts/*`
-
-from the engine workspace configured by `ENGINE_ROOT`.
-
-If `ENGINE_ROOT` is not set, the dashboard falls back to a sibling `../Job Tool` workspace.
-
-## 🧱 Stack
-
-- Next.js
-- React
-- Tailwind CSS
-- better-sqlite3
-
-## 🗂️ Pages
-
-- `/` overview, summary cards, and quick links
-- `/search` grouped search across major collections
-- `/recommendations` explore-mode recommendations with summaries and scores
-- `/run` ready-to-paste PowerShell `tsx` script generation, including `resume-incomplete`, ReactJobs scoring, and Workable external apply
-- `/reviews` review history from `JobReviewHistory`
-- `/decisions` detailed application decisions
-- `/answers` prepared Easy Apply answer sets and reusable answer memory
-- `/artifacts` compact run index for recent generated artifacts
-- `/artifacts/[id]` individual run diagnostics with platform labels, timings, recovery metadata, unknown-action context, events, and raw previews
-- `/companies` firm-level aggregates, logos, LinkedIn URLs, and linked decisions
-
-## 🚀 Setup
-
-### 1. Install dependencies
-
-```bash
-npm install
+```text
+Desktop/
+  Job Tool/             # engine data lives here
+  Job Tool Dashboard/   # dashboard reads and controls the engine
 ```
-
-### 2. Create your local env file
-
-```bash
-cp .env.example .env
-```
-
-Portable example:
 
 ```env
 ENGINE_ROOT=../Job Tool
 ```
 
-### 3. Start the dashboard
+If `ENGINE_ROOT` is missing, the dashboard falls back to a sibling `../Job Tool` folder.
+
+```mermaid
+flowchart LR
+  UI["Dashboard UI"] --> API["Local Next.js API routes"]
+  API --> Runner["engine runner"]
+  Runner --> Engine["Job Tool CLI"]
+  Engine --> DB["prisma/dev.db"]
+  Engine --> Logs["logs/app.log"]
+  Engine --> Artifacts["artifacts/"]
+  API --> DB
+  API --> Logs
+  API --> Artifacts
+```
+
+The API routes are local only inside your Next.js server. The dashboard reads:
+
+- `prisma/dev.db`
+- `logs/app.log`
+- `artifacts/*`
+- `.env`
+- `.auth/linkedin-session.json`
+- `user/resume.pdf`
+
+## ▶️ Run Control
+
+The `/run` page can start engine commands from the dashboard and follow their output through the database, logs, and artifacts the engine already writes.
+
+Current controls include:
+
+- local readiness checks for engine folder, database, logs, resume, LinkedIn session, and LM Studio
+- `Start Run` for configured engine commands
+- `Stop` using Windows process-tree termination when needed
+- live refresh while a run is active
+- current activity such as scanning, evaluating, applying, submitted, failed
+- latest job outcomes with role, company, score, decision, and summary
+- generated PowerShell fallback scripts for manual runs
+
+The dashboard intentionally hides raw PID details from the main UI because process IDs are not useful for normal run monitoring.
+
+## ⚡ Quick Start
 
 ```bash
+npm install
+cp .env.example .env
 npm run dev
 ```
+
+Open:
+
+```text
+http://localhost:3000
+```
+
+If port `3000` is busy, run Next on another port:
+
+```bash
+npm run dev -- -p 3100
+```
+
+## 🔧 Environment
+
+Minimal `.env`:
+
+```env
+ENGINE_ROOT=../Job Tool
+```
+
+Use an absolute path if the projects are not siblings:
+
+```env
+ENGINE_ROOT=C:\Users\you\Desktop\Job Tool
+```
+
+## 🧪 Scripts
+
+```bash
+npm run dev          # start local dashboard
+npm run build        # production build
+npm run start        # start production server after build
+npm run type-check   # Next build/type validation
+npm test             # Vitest suite
+```
+
+## 🧩 Local API Surface
+
+| Route | Purpose |
+| --- | --- |
+| `GET /api/config/status` | Local readiness and configuration checks. |
+| `POST /api/run/start` | Start a dashboard-configured engine run. |
+| `POST /api/run/stop` | Stop the active engine run. |
+| `GET /api/run/current` | Return active run state and computed progress. |
+| `GET /api/run/:id/events` | Server-sent events for run updates. |
 
 ## ✅ Verification
 
 ```bash
 npm run type-check
 npm test
-npm run build
 ```
+
+The test suite covers data readers, artifact parsing, run configuration, run control, and major dashboard sections.
 
 ## 📚 Documentation
 
-AI-first file maps live here:
-
-- [docs/README.md](./docs/README.md)
-- [docs/FILE_MAP.md](./docs/FILE_MAP.md)
-
-## 📝 Notes
-
-- the dashboard is read-focused by design
-- `/run` generates scripts but does not execute them
-- `/run` can generate `resume-incomplete` scripts for stopped batch-application recovery
-- `/run` includes ReactJobs scoring and Workable external-apply examples
-- `/recommendations` reads `JobRecommendation` rows produced by engine explore mode
-- the dashboard stays separate from the engine repo to keep UI concerns isolated
+- [docs/README.md](./docs/README.md): documentation entrypoint
+- [docs/FILE_MAP.md](./docs/FILE_MAP.md): page, component, data reader, API, and test map
 
 ## 📄 License
 
-This project is source-available under the [PolyForm Noncommercial 1.0.0](./LICENSE) license.
-You can inspect, study, and use it for personal or other non-commercial purposes.
-Commercial use is not permitted without separate permission from the copyright holder.
+Source-available under the [PolyForm Noncommercial 1.0.0](./LICENSE) license. Personal and non-commercial use are allowed. Commercial use requires separate permission.

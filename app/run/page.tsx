@@ -9,8 +9,8 @@ export default function RunPage() {
     <PageShell>
       <PageIntro
         eyebrow="Run"
-        title="Generate engine scripts without rebuilding them by hand."
-        subtitle="Use the left panel to configure script options. The right panel turns them into the exact PowerShell `tsx` wrapper you can paste into terminal when you are ready, including ReactJobs scoring, Workable external apply, and incomplete-run recovery."
+        title="Start and monitor engine workflows from the dashboard."
+        subtitle="Configure a run, check local readiness, then watch the engine write decisions, reviews, and artifacts in real time. The CLI wrapper stays available as a fallback."
       />
       <RunScriptBuilder />
     </PageShell>
