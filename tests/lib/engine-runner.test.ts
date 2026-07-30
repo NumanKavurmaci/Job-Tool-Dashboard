@@ -55,13 +55,23 @@ describe("engine runner", () => {
     spawnMock.mockReturnValue(child);
     const { startEngineRun, getCurrentRun } = await import("@/lib/engine-runner");
 
-    const run = startEngineRun(["apply-batch", "https://example.com", "--count", "1"]);
+    const collectionUrl = "https://www.linkedin.com/jobs/search-results/?keywords=software&geoId=102105699";
+    const run = startEngineRun(["apply-batch", collectionUrl, "--count", "1"]);
 
     expect(run.status).toBe("running");
     expect(spawnMock).toHaveBeenCalledWith(
-      process.platform === "win32" ? "npm.cmd" : "npm",
-      ["run", "dev", "--", "apply-batch", "https://example.com", "--count", "1"],
-      expect.objectContaining({ cwd: "C:\\engine" }),
+      process.execPath,
+      [
+        expect.stringMatching(/[\\/]node_modules[\\/]npm[\\/]bin[\\/]npm-cli\.js$/),
+        "run",
+        "dev",
+        "--",
+        "apply-batch",
+        collectionUrl,
+        "--count",
+        "1",
+      ],
+      expect.objectContaining({ cwd: "C:\\engine", shell: false }),
     );
     expect(getCurrentRun()?.pid).toBe(123);
   });

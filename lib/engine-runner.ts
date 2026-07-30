@@ -67,6 +67,10 @@ function npmCommand() {
   return process.platform === "win32" ? "npm.cmd" : "npm";
 }
 
+function npmCliPath() {
+  return path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js");
+}
+
 function sanitizedProcessEnv(): NodeJS.ProcessEnv {
   return Object.fromEntries(
     Object.entries(process.env).filter(
@@ -125,13 +129,13 @@ export function startEngineRun(args: string[]): EngineRunRecord {
 
   let child: ChildProcessWithoutNullStreams;
   try {
-    child = spawn(npmCommand(), commandArgs, {
+    child = spawn(process.execPath, [npmCliPath(), ...commandArgs], {
       cwd,
       env: {
         ...sanitizedProcessEnv(),
         FORCE_COLOR: "0",
       },
-      shell: process.platform === "win32",
+      shell: false,
       windowsHide: true,
     });
   } catch (error) {
