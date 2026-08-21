@@ -43,6 +43,7 @@ const runnerMocks = vi.hoisted(() => {
     getCurrentRunMock: vi.fn(),
     getRunMock: vi.fn(),
     getRunRegistryStateMock: vi.fn(),
+    readLatestJobOutcomesMock: vi.fn(),
     readEngineConfigStatusMock: vi.fn(),
     startEngineRunMock: vi.fn(),
     stopCurrentRunMock: vi.fn(),
@@ -58,6 +59,7 @@ const {
   getCurrentRunMock,
   getRunMock,
   getRunRegistryStateMock,
+  readLatestJobOutcomesMock,
   readEngineConfigStatusMock,
   startEngineRunMock,
   stopCurrentRunMock,
@@ -83,6 +85,10 @@ vi.mock("@/lib/engine-runner", () => ({
 
 vi.mock("@/lib/engine-status", () => ({
   readEngineConfigStatus: runnerMocks.readEngineConfigStatusMock,
+}));
+
+vi.mock("@/lib/run-progress", () => ({
+  readLatestJobOutcomes: runnerMocks.readLatestJobOutcomesMock,
 }));
 
 import { GET as getCurrentRuns } from "@/app/api/run/current/route";
@@ -129,6 +135,7 @@ describe("run API routes", () => {
       maxActive: 2,
       available: 2,
     });
+    readLatestJobOutcomesMock.mockReturnValue([]);
     stopCurrentRunMock.mockReturnValue(null);
     stopEngineRunMock.mockReturnValue(null);
   });
@@ -390,6 +397,7 @@ describe("run API routes", () => {
       activeCount: 2,
       maxActive: 2,
       available: 0,
+      latestOutcomes: [],
     });
   });
 

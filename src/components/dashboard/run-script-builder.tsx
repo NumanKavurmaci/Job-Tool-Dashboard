@@ -68,8 +68,12 @@ type CurrentRun = {
     submittedCount: number;
     failedCount: number;
     applyDecisionCount: number;
+    terminalOutcome: {
+      status: "success" | "partial" | "failed";
+      reason: string | null;
+    } | null;
     currentActivity: {
-      stage: "starting" | "scanning" | "evaluating" | "applying" | "submitted" | "failed" | "completed" | "stopping" | "stopped";
+      stage: "starting" | "scanning" | "evaluating" | "applying" | "submitted" | "partial" | "failed" | "completed" | "stopping" | "stopped";
       label: string;
       detail: string | null;
       jobUrl: string | null;
@@ -90,13 +94,33 @@ type CurrentRun = {
   } | null;
 };
 
-function statusTone(status: CurrentRun["status"] | undefined) {
+type RunDisplayStatus = CurrentRun["status"] | "partial";
+type RunActivityStage = NonNullable<NonNullable<CurrentRun["progress"]>["currentActivity"]>["stage"];
+
+function statusTone(status: RunDisplayStatus | undefined) {
   if (status === "running") return "info" as const;
-  if (status === "stopping") return "warn" as const;
+  if (status === "stopping" || status === "partial") return "warn" as const;
   if (status === "completed") return "apply" as const;
   if (status === "failed") return "skip" as const;
   if (status === "stopped") return "warn" as const;
   return "neutral" as const;
+}
+
+function displayStatus(run: CurrentRun | null | undefined): RunDisplayStatus | undefined {
+  if (run?.status === "completed" && run.progress?.terminalOutcome?.status === "partial") {
+    return "partial";
+  }
+  if (run?.status === "completed" && run.progress?.terminalOutcome?.status === "failed") {
+    return "failed";
+  }
+  return run?.status;
+}
+
+function activityTone(stage: RunActivityStage) {
+  if (stage === "partial" || stage === "stopping" || stage === "stopped") return "warn" as const;
+  if (stage === "failed") return "skip" as const;
+  if (stage === "completed" || stage === "submitted") return "apply" as const;
+  return "info" as const;
 }
 
 function outcomeTone(review: RunProgressReview) {
@@ -209,6 +233,7 @@ export function RunScriptBuilder() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [status, setStatus] = useState<ConfigStatus | null>(null);
   const [runs, setRuns] = useState<CurrentRun[]>([]);
+  const [latestOutcomes, setLatestOutcomes] = useState<RunProgressReview[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
@@ -243,6 +268,9 @@ export function RunScriptBuilder() {
     return prioritized.slice(0, 4);
   }, [activeRuns, runs]);
   const activeRunKey = activeRuns.map((run) => `${run.id}:${run.status}`).join("|");
+  const displayedOutcomes = currentRun
+    ? [...(currentRun.progress?.reviews ?? [])].slice(-8).reverse()
+    : latestOutcomes.slice(0, 8);
 
   const generated = useMemo(() => {
     try {
@@ -271,9 +299,14 @@ export function RunScriptBuilder() {
   async function refreshCurrentRun() {
     const response = await fetch("/api/run/current", { cache: "no-store" });
     if (response.ok) {
-      const payload = (await response.json()) as { run: CurrentRun | null; runs?: CurrentRun[] };
+      const payload = (await response.json()) as {
+        run: CurrentRun | null;
+        runs?: CurrentRun[];
+        latestOutcomes?: RunProgressReview[];
+      };
       const nextRuns = payload.runs ?? (payload.run ? [payload.run] : []);
       setRuns(nextRuns);
+      setLatestOutcomes(payload.latestOutcomes ?? []);
       setSelectedRunId((current) =>
         current && nextRuns.some((run) => run.id === current) ? current : nextRuns[0]?.id ?? null,
       );
@@ -539,6 +572,7 @@ export function RunScriptBuilder() {
             {visibleRuns.map((run) => {
               const active = run.status === "running" || run.status === "stopping";
               const selected = run.id === currentRun?.id;
+              const runStatus = displayStatus(run);
               return (
                 <div
                   key={run.id}
@@ -546,7 +580,7 @@ export function RunScriptBuilder() {
                 >
                   <button className="block w-full text-left" type="button" onClick={() => setSelectedRunId(run.id)}>
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge tone={statusTone(run.status)}>{run.status}</Badge>
+                      <Badge tone={statusTone(runStatus)}>{runStatus}</Badge>
                       <Badge tone={executionTone(run.executionMode)}>{run.executionMode.toUpperCase()}</Badge>
                       <Badge tone="neutral">{run.id.slice(0, 8)}</Badge>
                     </div>
@@ -592,8 +626,8 @@ export function RunScriptBuilder() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Badge tone={statusTone(currentRun?.status)}>
-              {currentRun ? currentRun.status : "idle"}
+            <Badge tone={statusTone(displayStatus(currentRun))}>
+              {currentRun ? displayStatus(currentRun) : "idle"}
             </Badge>
             {currentRun?.progress?.latestArtifact ? (
               <Badge tone="apply">Artifact ready</Badge>
@@ -607,7 +641,9 @@ export function RunScriptBuilder() {
           {currentRun?.progress?.currentActivity ? (
             <div className="rounded-2xl border border-blue-400/25 bg-blue-400/10 p-4">
               <div className="flex flex-wrap items-center gap-2">
-                <Badge tone="info">{currentRun.progress.currentActivity.stage}</Badge>
+                <Badge tone={activityTone(currentRun.progress.currentActivity.stage)}>
+                  {currentRun.progress.currentActivity.stage}
+                </Badge>
                 {currentRun.progress.currentActivity.score != null ? (
                   <Badge tone="neutral">Score {currentRun.progress.currentActivity.score}</Badge>
                 ) : null}
@@ -724,10 +760,12 @@ export function RunScriptBuilder() {
           <SectionTitle
             eyebrow="Progress"
             title="Latest job outcomes"
-            subtitle="Rows appear as the engine writes review history for this run."
+            subtitle={currentRun
+              ? "Rows appear from review history or the selected run artifact."
+              : "Showing the latest persisted outcomes even after the dashboard process restarts."}
           />
           <div className="space-y-3">
-            {(currentRun?.progress?.reviews ?? []).slice(-8).reverse().map((review) => (
+            {displayedOutcomes.map((review) => (
               <div key={`${review.createdAt}-${review.jobUrl}-${review.status}`} className="rounded-2xl border border-line bg-black/20 p-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge tone={outcomeTone(review)}>{review.status}</Badge>
@@ -746,9 +784,9 @@ export function RunScriptBuilder() {
                 Waiting for the first persisted review row.
               </div>
             ) : null}
-            {!currentRun ? (
+            {!currentRun && displayedOutcomes.length === 0 ? (
               <div className="rounded-2xl border border-line bg-black/20 p-4 text-sm text-muted">
-                No dashboard-started run is active yet.
+                No persisted job outcomes are available yet.
               </div>
             ) : null}
           </div>

@@ -251,18 +251,35 @@ function alignProgressWithRunLifecycle(run: EngineRunRecord, progress: RunProgre
   if (run.status === "running") return progress;
 
   const lastObservedActivity = progress.currentActivity;
+  const completedOutcome = run.status === "completed" ? progress.terminalOutcome : null;
   const terminalEvent = [...run.events].reverse().find((event) =>
     event.type === `run_${run.status}` || (run.status === "completed" && event.type === "run_finished"),
   );
-  const copy = run.status === "stopping"
-    ? { label: "Stopping run", detail: terminalEvent?.message ?? "Waiting for the engine process to exit." }
-    : {
-        completed: { label: "Run completed", detail: terminalEvent?.message ?? "Engine run completed." },
-        failed: { label: "Run failed", detail: terminalEvent?.message ?? "Engine run failed." },
-        stopped: { label: "Run stopped", detail: terminalEvent?.message ?? "Engine run stopped." },
-      }[run.status];
+  let lifecycleStage: RunCurrentActivity["stage"] = run.status;
+  let copy: { label: string; detail: string };
+  if (completedOutcome?.status === "partial") {
+    lifecycleStage = "partial";
+    copy = {
+      label: "Run completed with partial outcome",
+      detail: completedOutcome.reason ?? "The engine completed, but one or more job outcomes were incomplete.",
+    };
+  } else if (completedOutcome?.status === "failed") {
+    lifecycleStage = "failed";
+    copy = {
+      label: "Run completed with failed outcome",
+      detail: completedOutcome.reason ?? "The engine process exited cleanly, but the batch outcome failed.",
+    };
+  } else if (run.status === "stopping") {
+    copy = { label: "Stopping run", detail: terminalEvent?.message ?? "Waiting for the engine process to exit." };
+  } else {
+    copy = {
+      completed: { label: "Run completed", detail: terminalEvent?.message ?? "Engine run completed." },
+      failed: { label: "Run failed", detail: terminalEvent?.message ?? "Engine run failed." },
+      stopped: { label: "Run stopped", detail: terminalEvent?.message ?? "Engine run stopped." },
+    }[run.status];
+  }
   const lifecycleActivity: RunCurrentActivity = {
-    stage: run.status,
+    stage: lifecycleStage,
     label: copy.label,
     detail: copy.detail,
     jobUrl: lastObservedActivity?.jobUrl ?? null,

@@ -123,6 +123,45 @@ describe("run progress", () => {
     });
   });
 
+  it("collapses repeated review history into the latest canonical job outcome", async () => {
+    const db = new Database(path.join(tempDir, "prisma", "dev.db"));
+    db.prepare(`
+      INSERT INTO JobReviewHistory
+        (id, jobPostingId, jobUrl, source, status, score, threshold, decision, policyAllowed, reasons, summary, createdAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      "review-1-terminal",
+      "job-1",
+      "https://www.linkedin.com/jobs/view/123/?trackingId=duplicate",
+      "apply-batch",
+      "FAILED",
+      72,
+      40,
+      "APPLY",
+      1,
+      "[]",
+      "Application attempt timed out.",
+      1781017057000,
+    );
+    db.close();
+
+    const { readRunProgress } = await import("@/lib/run-progress");
+    const progress = readRunProgress({
+      startedAt: new Date(1781017050000).toISOString(),
+      mode: "apply-batch",
+    });
+
+    expect(progress.reviews).toHaveLength(1);
+    expect(progress.reviews[0]).toMatchObject({
+      status: "FAILED",
+      decision: "APPLY",
+      summary: "Application attempt timed out.",
+    });
+    expect(progress.evaluatedCount).toBe(1);
+    expect(progress.applyDecisionCount).toBe(1);
+    expect(progress.failedCount).toBe(1);
+  });
+
   it("isolates overlapping runs by correlation id across reviews, logs, and artifacts", async () => {
     const dbPath = path.join(tempDir, "prisma", "dev.db");
     const db = new Database(dbPath);
@@ -202,5 +241,106 @@ describe("run progress", () => {
     expect(runB.currentActivity).toMatchObject({ decision: "SKIP", score: 31 });
     expect(runA.latestArtifact?.name).toContain("-run-a-");
     expect(runB.latestArtifact?.name).toContain("-run-b-");
+  });
+
+  it("falls back to batch artifact outcomes when a provider writes no review row", async () => {
+    const db = new Database(path.join(tempDir, "prisma", "dev.db"));
+    db.prepare("DELETE FROM JobReviewHistory").run();
+    db.close();
+
+    const runId = "kariyer-run";
+    const artifactPath = path.join(
+      tempDir,
+      "artifacts",
+      "batch-runs",
+      `2026-06-09-${runId}-apply-batch-dry-run.json`,
+    );
+    writeFileSync(
+      artifactPath,
+      JSON.stringify({
+        mode: "apply-batch",
+        dryRun: true,
+        dashboardRunId: runId,
+        applyBatch: {
+          status: "partial",
+          stopReason: "Security verification blocked the remaining jobs.",
+          jobs: [
+            {
+              url: "https://www.kariyer.net/is-ilani/acme-yazilim-gelistirme-uzmani-123",
+              title: "Yazilim Gelistirme Uzmani",
+              company: "Acme",
+              location: "Istanbul",
+              status: "failed",
+              error: "Kariyer.net requires manual security verification.",
+            },
+          ],
+        },
+      }),
+    );
+    const artifactTime = new Date(1781017058000);
+    utimesSync(artifactPath, artifactTime, artifactTime);
+
+    const { readRunProgress } = await import("@/lib/run-progress");
+    const progress = readRunProgress({
+      startedAt: new Date(1781017050000).toISOString(),
+      finishedAt: new Date(1781017060000).toISOString(),
+      mode: "apply-batch",
+      runId,
+    });
+
+    expect(progress.evaluatedCount).toBe(1);
+    expect(progress.failedCount).toBe(1);
+    expect(progress.terminalOutcome).toEqual({
+      status: "partial",
+      reason: "Security verification blocked the remaining jobs.",
+    });
+    expect(progress.reviews).toEqual([
+      expect.objectContaining({
+        jobUrl: "https://www.kariyer.net/is-ilani/acme-yazilim-gelistirme-uzmani-123",
+        title: "Yazilim Gelistirme Uzmani",
+        company: "Acme",
+        status: "FAILED",
+        summary: "Kariyer.net requires manual security verification.",
+      }),
+    ]);
+  });
+
+  it("reads recent outcomes without depending on the in-memory run registry", async () => {
+    const artifactPath = path.join(
+      tempDir,
+      "artifacts",
+      "batch-runs",
+      "latest-kariyer-apply-batch-dry-run.json",
+    );
+    writeFileSync(
+      artifactPath,
+      JSON.stringify({
+        applyBatch: {
+          jobs: [
+            {
+              url: "https://www.kariyer.net/is-ilani/acme-yazilim-gelistirme-uzmani-456",
+              title: "Kariyer Role",
+              company: "Kariyer Company",
+              status: "failed",
+              error: "Login is required.",
+            },
+          ],
+        },
+      }),
+    );
+    const artifactTime = new Date(1781017060000);
+    utimesSync(artifactPath, artifactTime, artifactTime);
+
+    const { readLatestJobOutcomes } = await import("@/lib/run-progress");
+    const outcomes = readLatestJobOutcomes(8);
+
+    expect(outcomes[0]).toMatchObject({
+      jobUrl: "https://www.kariyer.net/is-ilani/acme-yazilim-gelistirme-uzmani-456",
+      title: "Kariyer Role",
+      company: "Kariyer Company",
+      status: "FAILED",
+      summary: "Login is required.",
+    });
+    expect(outcomes.some((outcome) => outcome.jobUrl === "https://www.linkedin.com/jobs/view/123")).toBe(true);
   });
 });

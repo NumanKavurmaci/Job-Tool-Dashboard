@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { closeSync, openSync, readFileSync, readSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
+import { buildArtifactId, readArtifactById, type RunOutcomeJob } from "./engine-artifacts";
 import { getEngineArtifactsPath, getEngineDbPath, getEngineLogPath } from "./engine-paths";
 
 export type RunProgressReview = {
@@ -25,6 +26,10 @@ export type RunProgressSummary = {
   applyDecisionCount: number;
   currentActivity: RunCurrentActivity | null;
   lastObservedActivity?: RunCurrentActivity | null;
+  terminalOutcome: {
+    status: "success" | "partial" | "failed";
+    reason: string | null;
+  } | null;
   latestArtifact: {
     name: string;
     fullPath: string;
@@ -35,7 +40,7 @@ export type RunProgressSummary = {
 };
 
 export type RunCurrentActivity = {
-  stage: "starting" | "scanning" | "evaluating" | "applying" | "submitted" | "failed" | "completed" | "stopping" | "stopped";
+  stage: "starting" | "scanning" | "evaluating" | "applying" | "submitted" | "partial" | "failed" | "completed" | "stopping" | "stopped";
   label: string;
   detail: string | null;
   jobUrl: string | null;
@@ -134,10 +139,17 @@ export function readRunProgress(args: {
       )
       .all(...params, args.limit ?? 200) as Array<Omit<RunProgressReview, "createdAt"> & { createdAt: string | number }>;
 
-    const reviews = rows.map((row) => ({
-      ...row,
-      createdAt: normalizeCreatedAt(row.createdAt),
-    }));
+    const persistedReviews = collapseReviewOutcomes(
+      rows.map((row) => ({
+        ...row,
+        createdAt: normalizeCreatedAt(row.createdAt),
+      })),
+    );
+    const latestArtifact = readLatestRunArtifact(args.startedAt, args.finishedAt, args.runId);
+    const reviews = persistedReviews.length > 0
+      ? persistedReviews
+      : readArtifactOutcomeReviews(latestArtifact);
+    const terminalOutcome = readArtifactTerminalOutcome(latestArtifact);
 
     const uniqueReviewedJobs = new Set(reviews.map((review) => review.jobUrl));
     return {
@@ -152,12 +164,175 @@ export function readRunProgress(args: {
         runId: args.runId,
         reviews,
       }),
-      latestArtifact: readLatestRunArtifact(args.startedAt, args.finishedAt, args.runId),
+      latestArtifact,
+      terminalOutcome,
       reviews,
     };
   } finally {
     db.close();
   }
+}
+
+function collapseReviewOutcomes(reviews: RunProgressReview[]): RunProgressReview[] {
+  const latestByUrl = new Map<string, RunProgressReview>();
+  for (const review of reviews) {
+    latestByUrl.set(normalizeJobUrl(review.jobUrl) ?? review.jobUrl, review);
+  }
+
+  return [...latestByUrl.values()].sort(
+    (left, right) => Date.parse(left.createdAt) - Date.parse(right.createdAt),
+  );
+}
+
+export function readLatestJobOutcomes(limit = 8): RunProgressReview[] {
+  const boundedLimit = Math.max(0, Math.min(limit, 50));
+  if (boundedLimit === 0) {
+    return [];
+  }
+
+  let persistedReviews: RunProgressReview[] = [];
+  try {
+    const db = openDb();
+    try {
+      const rows = db.prepare(`
+        SELECT
+          h.createdAt,
+          h.jobUrl,
+          h.status,
+          h.score,
+          h.threshold,
+          h.decision,
+          h.policyAllowed,
+          h.summary,
+          COALESCE(j.title, (
+            SELECT jp.title FROM JobPosting jp WHERE jp.url = h.jobUrl LIMIT 1
+          )) AS title,
+          COALESCE(j.company, (
+            SELECT jp.company FROM JobPosting jp WHERE jp.url = h.jobUrl LIMIT 1
+          )) AS company,
+          COALESCE(j.location, (
+            SELECT jp.location FROM JobPosting jp WHERE jp.url = h.jobUrl LIMIT 1
+          )) AS location
+        FROM JobReviewHistory h
+        LEFT JOIN JobPosting j ON j.id = h.jobPostingId
+        ORDER BY h.createdAt DESC
+        LIMIT ?
+      `).all(Math.max(50, boundedLimit * 8)) as Array<
+        Omit<RunProgressReview, "createdAt"> & { createdAt: string | number }
+      >;
+      persistedReviews = rows.map((row) => ({
+        ...row,
+        createdAt: normalizeCreatedAt(row.createdAt),
+      }));
+    } finally {
+      db.close();
+    }
+  } catch {
+    // Artifact outcomes still provide a useful fallback if the database is unavailable.
+  }
+
+  const combined = [...persistedReviews, ...readMostRecentArtifactOutcomeReviews()]
+    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
+  const latestByUrl = new Map<string, RunProgressReview>();
+  for (const review of combined) {
+    const key = normalizeJobUrl(review.jobUrl) ?? review.jobUrl;
+    if (!latestByUrl.has(key)) {
+      latestByUrl.set(key, review);
+    }
+  }
+
+  return [...latestByUrl.values()].slice(0, boundedLimit);
+}
+
+function readArtifactOutcomeReviews(
+  artifact: RunProgressSummary["latestArtifact"],
+): RunProgressReview[] {
+  if (!artifact) {
+    return [];
+  }
+
+  const summary = readArtifactById(buildArtifactId("batch-runs", artifact.name));
+  const outcomes = summary?.details?.outcomeJobs;
+  if (!outcomes) {
+    return [];
+  }
+
+  const byUrl = new Map<string, RunOutcomeJob>();
+  for (const job of [...outcomes.recommended, ...outcomes.incomplete, ...outcomes.applied]) {
+    byUrl.set(normalizeJobUrl(job.url) ?? job.url, job);
+  }
+
+  return [...byUrl.values()].map((job) => ({
+    createdAt: artifact.updatedAt,
+    jobUrl: job.url,
+    status: (job.status ?? (job.decision === "APPLY" ? "EVALUATED" : "UNKNOWN")).toUpperCase(),
+    score: job.score,
+    threshold: null,
+    decision: job.decision,
+    policyAllowed: null,
+    summary: job.reason,
+    title: job.title,
+    company: job.company,
+    location: job.location,
+  }));
+}
+
+function readArtifactTerminalOutcome(
+  artifact: RunProgressSummary["latestArtifact"],
+): RunProgressSummary["terminalOutcome"] {
+  if (!artifact) {
+    return null;
+  }
+
+  const details = readArtifactById(buildArtifactId("batch-runs", artifact.name))?.details;
+  const status = details?.status?.trim().toLowerCase();
+  if (!status) {
+    return null;
+  }
+
+  if (status === "partial" || status.startsWith("stopped_")) {
+    return { status: "partial", reason: details?.stopReason ?? null };
+  }
+  if (status === "failed" || status === "error") {
+    return { status: "failed", reason: details?.stopReason ?? null };
+  }
+  if (["success", "completed", "submitted"].includes(status)) {
+    return { status: "success", reason: details?.stopReason ?? null };
+  }
+
+  return null;
+}
+
+function readMostRecentArtifactOutcomeReviews(): RunProgressReview[] {
+  const batchDir = path.join(getEngineArtifactsPath(), "batch-runs");
+  try {
+    const candidates = readdirSync(batchDir)
+      .filter((name) => name.toLowerCase().endsWith(".json"))
+      .map((name) => {
+        const fullPath = path.join(batchDir, name);
+        const stat = statSync(fullPath);
+        return {
+          name,
+          fullPath,
+          updatedAt: stat.mtime.toISOString(),
+          size: stat.size,
+          modifiedAt: stat.mtimeMs,
+        };
+      })
+      .sort((left, right) => right.modifiedAt - left.modifiedAt)
+      .slice(0, 5);
+
+    for (const candidate of candidates) {
+      const reviews = readArtifactOutcomeReviews(candidate);
+      if (reviews.length > 0) {
+        return reviews;
+      }
+    }
+  } catch {
+    return [];
+  }
+
+  return [];
 }
 
 function normalizeCreatedAt(value: string | number): string {

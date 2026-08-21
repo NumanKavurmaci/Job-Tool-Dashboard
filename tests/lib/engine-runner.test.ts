@@ -27,6 +27,7 @@ function progressWithActivity(stage: "applying" | "submitted" = "applying") {
     submittedCount: 0,
     failedCount: 0,
     applyDecisionCount: 0,
+    terminalOutcome: null,
     currentActivity: {
       stage,
       label: stage === "applying" ? "Applying Software Engineer at Acme" : "Submitted Software Engineer at Acme",
@@ -300,6 +301,38 @@ describe("engine runner", () => {
       });
     },
   );
+
+  it("keeps process completion while exposing a partial batch terminal outcome", async () => {
+    const child = fakeChild();
+    spawnMock.mockReturnValue(child);
+    readRunProgressMock.mockReturnValue({
+      ...progressWithActivity(),
+      failedCount: 2,
+      terminalOutcome: {
+        status: "partial",
+        reason: "Two approved jobs stopped before completion.",
+      },
+    });
+    const { startEngineRun, getCurrentRun } = await import("@/lib/engine-runner");
+
+    startEngineRun(["apply-batch", "https://example.com", "--count", "2"]);
+    child.emit("close", 0);
+
+    expect(getCurrentRun()).toMatchObject({
+      status: "completed",
+      progress: {
+        terminalOutcome: {
+          status: "partial",
+          reason: "Two approved jobs stopped before completion.",
+        },
+        currentActivity: {
+          stage: "partial",
+          label: "Run completed with partial outcome",
+          detail: "Two approved jobs stopped before completion.",
+        },
+      },
+    });
+  });
 
   it("shows stopping activity until the stopped child closes", async () => {
     const child = fakeChild();

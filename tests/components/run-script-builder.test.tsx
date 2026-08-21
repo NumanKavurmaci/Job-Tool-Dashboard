@@ -13,6 +13,8 @@ describe("RunScriptBuilder", () => {
     expect(html).toContain("Start Run");
     expect(html).toContain("Local readiness");
     expect(html).toContain("Latest job outcomes");
+    expect(html).toContain("Showing the latest persisted outcomes even after the dashboard process restarts.");
+    expect(html).toContain("No persisted job outcomes are available yet.");
     expect(html).toContain("Generated PowerShell wrapper");
     expect(html).toContain("await main([&#x27;apply-batch&#x27;, &#x27;https://www.linkedin.com/jobs/collections/hiring-in-network&#x27;, &#x27;--count&#x27;, &#x27;25&#x27;, &#x27;--score-threshold&#x27;, &#x27;40&#x27;, &#x27;--resume&#x27;, &#x27;./user/resume.pdf&#x27;, &#x27;--dry-run&#x27;], appDeps);");
   });
