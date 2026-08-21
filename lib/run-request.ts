@@ -33,6 +33,15 @@ function isDomain(hostname: string, expectedDomain: string): boolean {
   return normalized === expectedDomain || normalized.endsWith(`.${expectedDomain}`);
 }
 
+function isKariyerListingUrl(url: URL): boolean {
+  const hostname = url.hostname.toLowerCase();
+  const pathname = url.pathname.toLowerCase();
+  const isCanonicalHost = hostname === "kariyer.net" || hostname === "www.kariyer.net";
+  const isListingPath = pathname === "/is-ilanlari" || pathname.startsWith("/is-ilanlari/");
+
+  return isCanonicalHost && isListingPath && (url.port === "" || url.port === "443");
+}
+
 function isPrivateIpv4(hostname: string): boolean {
   const octets = hostname.split(".").map(Number);
   if (octets.length !== 4 || octets.some((octet) => !Number.isInteger(octet))) {
@@ -110,11 +119,12 @@ function validateHttpsUrl(type: RunScriptType, key: string, value: string): void
   if (type === "apply-batch") {
     const supportedListing =
       isDomain(parsed.hostname, "linkedin.com") ||
+      isKariyerListingUrl(parsed) ||
       isDomain(parsed.hostname, "reactjobs.io") ||
       isDomain(parsed.hostname, "jobs.ashbyhq.com");
     if (!supportedListing) {
       throw new RunRequestValidationError(
-        "apply-batch requires a LinkedIn, ReactJobs, or Ashby listing URL.",
+        "apply-batch requires a LinkedIn, Kariyer.net /is-ilanlari, ReactJobs, or Ashby listing URL.",
       );
     }
     return;

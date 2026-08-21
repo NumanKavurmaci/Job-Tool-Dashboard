@@ -147,6 +147,24 @@ describe("run config", () => {
     ]);
   });
 
+  it("builds Kariyer listing batches as dry-run by default and live only when explicit", () => {
+    const url = "https://www.kariyer.net/is-ilanlari/yazilim-gelistirme?sort=date";
+
+    expect(buildRunArgs("apply-batch", { url, count: 8 })).toEqual([
+      "apply-batch",
+      url,
+      "--count",
+      "8",
+      "--dry-run",
+    ]);
+    expect(buildRunArgs("apply-batch", { url, count: 8, dryRun: false })).toEqual([
+      "apply-batch",
+      url,
+      "--count",
+      "8",
+    ]);
+  });
+
   it("defaults every apply command to dry-run unless false is explicit", () => {
     expect(
       buildRunArgs("apply", {
@@ -237,6 +255,16 @@ describe("run config", () => {
     expect(externalApplyDefinition.fields.find((field) => field.key === "url")?.placeholder).toContain(
       "apply.workable.com",
     );
+  });
+
+  it("advertises Kariyer listing support on the primary apply batch", () => {
+    const definition = getRunScriptDefinition("apply-batch");
+    const urlField = definition.fields.find((field) => field.key === "url");
+
+    expect(definition.description).toContain("Kariyer.net");
+    expect(urlField?.label).toBe("Listing URL");
+    expect(urlField?.placeholder).toContain("kariyer.net/is-ilanlari");
+    expect(urlField?.description).toContain("Kariyer.net /is-ilanlari");
   });
 
   it("builds a PowerShell wrapper with properly quoted JavaScript string args", () => {

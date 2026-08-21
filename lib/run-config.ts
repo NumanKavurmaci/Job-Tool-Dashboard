@@ -266,16 +266,17 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
     type: "apply-batch",
     label: "Apply Batch",
     description:
-      "Run the LinkedIn apply batch flow from a collection URL, including external-application handoff when needed.",
+      "Evaluate and apply from a LinkedIn, Kariyer.net, ReactJobs, or Ashby listing URL, including external-application handoff when needed.",
     category: "primary",
     caution:
-      "This is the all-apply command. Clearing Dry Run can continue into real LinkedIn and external application submits.",
+      "This is the all-apply command. Clearing Dry Run can continue into real platform and external application submits.",
     fields: [
       {
         key: "url",
-        label: "Collection URL",
+        label: "Listing URL",
         type: "text",
-        placeholder: "https://www.linkedin.com/jobs/collections/hiring-in-network",
+        placeholder: "https://www.kariyer.net/is-ilanlari/...",
+        description: "Supports LinkedIn collections/search, Kariyer.net /is-ilanlari pages, ReactJobs results, and Ashby boards.",
         required: true,
         defaultValue: "https://www.linkedin.com/jobs/collections/hiring-in-network",
       },

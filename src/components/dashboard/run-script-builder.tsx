@@ -216,8 +216,8 @@ export function RunScriptBuilder() {
   const selectedIsAdvanced = definition.category !== "primary";
   const liveApplyEnabled = isLiveApplyRun(scriptType, values);
   const blockingChecks = useMemo(
-    () => (status ? getBlockingRunChecks(scriptType, status.checks) : []),
-    [scriptType, status],
+    () => (status ? getBlockingRunChecks(scriptType, status.checks, values) : []),
+    [scriptType, status, values],
   );
   const readinessPending = status === null;
   const runIsBlocked = readinessPending || blockingChecks.length > 0;

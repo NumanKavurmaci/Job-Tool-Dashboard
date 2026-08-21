@@ -177,6 +177,82 @@ describe("run API routes", () => {
     ]);
   });
 
+  it("accepts canonical Kariyer listing batches in dry-run and live modes", async () => {
+    const url = "https://www.kariyer.net/is-ilanlari/yazilim-gelistirme?sort=date";
+    const dryRun = await startRun(
+      requestFor("/api/run/start", {
+        type: "apply-batch",
+        values: { url, count: 4 },
+      }),
+    );
+    const live = await startRun(
+      requestFor("/api/run/start", {
+        type: "apply-batch",
+        values: { url, count: 4, dryRun: false },
+      }),
+    );
+
+    expect(dryRun.status).toBe(200);
+    expect(live.status).toBe(200);
+    expect(startEngineRunMock).toHaveBeenNthCalledWith(1, [
+      "apply-batch",
+      url,
+      "--count",
+      "4",
+      "--dry-run",
+    ]);
+    expect(startEngineRunMock).toHaveBeenNthCalledWith(2, [
+      "apply-batch",
+      url,
+      "--count",
+      "4",
+    ]);
+  });
+
+  it("rejects non-canonical Kariyer hosts and non-listing paths", async () => {
+    for (const url of [
+      "https://kariyer.net.evil.example/is-ilanlari/yazilim",
+      "https://kurumsal.kariyer.net/is-ilanlari/yazilim",
+      "https://www.kariyer.net/is-ilani/yazilim-123456",
+    ]) {
+      const response = await startRun(
+        requestFor("/api/run/start", {
+          type: "apply-batch",
+          values: { url },
+        }),
+      );
+      expect(response.status).toBe(400);
+    }
+
+    expect(startEngineRunMock).not.toHaveBeenCalled();
+  });
+
+  it("does not require a LinkedIn session for Kariyer batches but keeps it for LinkedIn", async () => {
+    readEngineConfigStatusMock.mockResolvedValue({
+      ready: false,
+      checks: readyChecks.map((check) =>
+        check.key === "linkedinSession" ? { ...check, ok: false, detail: "missing" } : check,
+      ),
+    });
+
+    const kariyer = await startRun(
+      requestFor("/api/run/start", {
+        type: "apply-batch",
+        values: { url: "https://www.kariyer.net/is-ilanlari/yazilim" },
+      }),
+    );
+    const linkedin = await startRun(
+      requestFor("/api/run/start", {
+        type: "apply-batch",
+        values: { url: "https://www.linkedin.com/jobs/collections/easy-apply" },
+      }),
+    );
+
+    expect(kariyer.status).toBe(200);
+    expect(linkedin.status).toBe(422);
+    expect(startEngineRunMock).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects paths that escape the engine root", async () => {
     const response = await startRun(
       requestFor("/api/run/start", {

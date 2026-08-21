@@ -29,7 +29,7 @@ export async function POST(request: Request) {
 
     const { type, values } = parseRunStartPayload(JSON.parse(rawBody) as unknown);
     const configStatus = await readEngineConfigStatus();
-    const blockers = getBlockingRunChecks(type, configStatus.checks);
+    const blockers = getBlockingRunChecks(type, configStatus.checks, values);
     if (blockers.length > 0) {
       return jsonNoStore(
         {
