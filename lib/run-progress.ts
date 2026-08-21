@@ -24,6 +24,7 @@ export type RunProgressSummary = {
   failedCount: number;
   applyDecisionCount: number;
   currentActivity: RunCurrentActivity | null;
+  lastObservedActivity?: RunCurrentActivity | null;
   latestArtifact: {
     name: string;
     fullPath: string;

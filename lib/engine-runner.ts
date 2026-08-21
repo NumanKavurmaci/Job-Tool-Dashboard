@@ -4,7 +4,11 @@ import { EventEmitter } from "node:events";
 import { mkdirSync, appendFileSync } from "node:fs";
 import path from "node:path";
 import { getEngineRoot } from "./engine-paths";
-import { readRunProgress, type RunProgressSummary } from "./run-progress";
+import {
+  readRunProgress,
+  type RunCurrentActivity,
+  type RunProgressSummary,
+} from "./run-progress";
 
 export type EngineRunEvent = {
   id: string;
@@ -93,13 +97,66 @@ export function getCurrentRun(): (EngineRunRecord & { progress: RunProgressSumma
 
 function readProgressSafe(run: EngineRunRecord): RunProgressSummary | null {
   try {
-    return readRunProgress({
+    const progress = readRunProgress({
       startedAt: run.startedAt,
       mode: run.mode,
     });
+    return alignProgressWithRunLifecycle(run, progress);
   } catch {
     return null;
   }
+}
+
+function alignProgressWithRunLifecycle(
+  run: EngineRunRecord,
+  progress: RunProgressSummary,
+): RunProgressSummary {
+  if (run.status === "running") {
+    return progress;
+  }
+
+  const lastObservedActivity = progress.currentActivity;
+  const terminalEvent = [...run.events]
+    .reverse()
+    .find((event) => event.type === `run_${run.status}` || (
+      run.status === "completed" && event.type === "run_finished"
+    ));
+  const terminalCopy: Record<Exclude<EngineRunRecord["status"], "running">, {
+    label: string;
+    detail: string;
+  }> = {
+    completed: {
+      label: "Run completed",
+      detail: terminalEvent?.message ?? "Engine run completed.",
+    },
+    failed: {
+      label: "Run failed",
+      detail: terminalEvent?.message ?? "Engine run failed.",
+    },
+    stopped: {
+      label: "Run stopped",
+      detail: terminalEvent?.message ?? "Engine run stopped.",
+    },
+  };
+  const copy = terminalCopy[run.status];
+  const terminalActivity: RunCurrentActivity = {
+    stage: run.status,
+    label: copy.label,
+    detail: copy.detail,
+    jobUrl: lastObservedActivity?.jobUrl ?? null,
+    title: lastObservedActivity?.title ?? null,
+    company: lastObservedActivity?.company ?? null,
+    location: lastObservedActivity?.location ?? null,
+    score: lastObservedActivity?.score ?? null,
+    decision: lastObservedActivity?.decision ?? null,
+    updatedAt: run.finishedAt ?? terminalEvent?.createdAt ?? run.startedAt,
+  };
+
+  return {
+    ...progress,
+    currentActivity: terminalActivity,
+    lastObservedActivity,
+  };
 }
 
 export function startEngineRun(args: string[]): EngineRunRecord {
