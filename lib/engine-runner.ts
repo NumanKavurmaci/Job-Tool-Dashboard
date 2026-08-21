@@ -43,6 +43,7 @@ export type EngineRunRecord = {
   args: string[];
   mode: string;
   executionMode: RunExecutionMode;
+  correlationMode: "run-id" | "legacy-time";
   exclusiveResources: string[];
   command: string;
   cwd: string;
@@ -102,7 +103,15 @@ const globalKey = "__jobToolDashboardRunManager";
 const globalStore = globalThis as unknown as Record<string, RunManager | LegacyRunManager | undefined>;
 
 function initializeManager(existing: RunManager | LegacyRunManager | undefined): RunManager {
-  if (existing && "version" in existing && existing.version === 2) return existing;
+  if (existing && "version" in existing && existing.version === 2) {
+    for (const entry of existing.entries.values()) {
+      const partial = entry.run as EngineRunRecord & { correlationMode?: EngineRunRecord["correlationMode"] };
+      partial.correlationMode ??= entry.run.events.every((event) => typeof event.sequence === "number")
+        ? "run-id"
+        : "legacy-time";
+    }
+    return existing;
+  }
 
   const next: RunManager = {
     version: 2,
@@ -115,6 +124,7 @@ function initializeManager(existing: RunManager | LegacyRunManager | undefined):
     const migrated = {
       ...legacy.current,
       executionMode: legacy.current.executionMode ?? executionModeForArgs(legacy.current.args),
+      correlationMode: "legacy-time" as const,
       exclusiveResources: legacy.current.exclusiveResources ?? exclusiveResourcesForArgs(legacy.current.args),
       revision: legacy.current.revision ?? legacy.current.events.length,
     };
@@ -228,7 +238,7 @@ function readProgressSafe(run: EngineRunRecord): RunProgressSummary | null {
     const progress = readRunProgress({
       startedAt: run.startedAt,
       finishedAt: run.finishedAt,
-      runId: run.id,
+      runId: run.correlationMode === "run-id" ? run.id : undefined,
       mode: run.mode,
     });
     return alignProgressWithRunLifecycle(run, progress);
@@ -318,6 +328,7 @@ export function startEngineRun(args: string[]): EngineRunRecord {
     args: [...args],
     mode: args[0] ?? "unknown",
     executionMode: executionModeForArgs(args),
+    correlationMode: "run-id",
     exclusiveResources,
     command: `${npmCommand()} ${commandArgs.join(" ")}`,
     cwd,

@@ -50,6 +50,7 @@ type CurrentRun = {
   startedAt: string;
   finishedAt: string | null;
   executionMode: "dry-run" | "live" | "non-submit";
+  correlationMode: "run-id" | "legacy-time";
   exclusiveResources: string[];
   status: "running" | "stopping" | "completed" | "failed" | "stopped";
   revision: number;

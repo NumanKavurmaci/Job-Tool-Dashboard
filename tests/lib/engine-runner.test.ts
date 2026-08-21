@@ -96,6 +96,43 @@ describe("engine runner", () => {
       }),
     );
     expect(getCurrentRun()?.pid).toBe(123);
+    expect(readRunProgressMock).toHaveBeenCalledWith(expect.objectContaining({ runId: run.id }));
+  });
+
+  it("keeps a pre-correlation hot-reloaded run on the legacy time fallback", async () => {
+    const child = fakeChild(404);
+    (globalThis as unknown as Record<string, unknown>).__jobToolDashboardRunManager = {
+      emitter: new EventEmitter(),
+      current: {
+        id: "legacy-run",
+        args: ["score", "https://example.com/jobs/1"],
+        mode: "score",
+        command: "npm score",
+        cwd: "C:\\engine",
+        startedAt: "2026-08-21T12:00:00.000Z",
+        finishedAt: null,
+        status: "running",
+        exitCode: null,
+        pid: 404,
+        events: [{
+          id: "legacy-event",
+          runId: "legacy-run",
+          type: "run_started",
+          message: "Started score.",
+          createdAt: "2026-08-21T12:00:00.000Z",
+        }],
+      },
+      child,
+    };
+
+    const { getCurrentRun } = await import("@/lib/engine-runner");
+    const run = getCurrentRun();
+
+    expect(run).toMatchObject({ id: "legacy-run", correlationMode: "legacy-time" });
+    expect(readRunProgressMock).toHaveBeenCalledWith(expect.objectContaining({
+      runId: undefined,
+      startedAt: "2026-08-21T12:00:00.000Z",
+    }));
   });
 
   it("tracks two distinct active runs and their child processes independently", async () => {

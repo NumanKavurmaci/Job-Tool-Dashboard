@@ -42,3 +42,5 @@ The dashboard admits at most two active engine processes. It uses a fail-fast re
 ## Process lifetime
 
 The registry is versioned on `globalThis`, so Next.js development hot reloads preserve active child handles. A full dashboard process restart cannot reattach to an existing child's stdio; operators should stop active runs before restarting the dashboard. Durable supervisor/reconciliation is intentionally a separate future layer rather than pretending an orphaned process is controllable.
+
+Runs that were already active before this architecture was loaded are migrated as `legacy-time`: they retain their child handle and time-based progress instead of incorrectly showing an empty run-ID-filtered view. Every newly started run uses strict `run-id` correlation.
