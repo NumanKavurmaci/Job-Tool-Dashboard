@@ -91,7 +91,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
         label: "Score Threshold",
         type: "number",
         defaultValue: 40,
-        min: 0,
+        min: 1,
         max: 100,
       },
       {
@@ -195,7 +195,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
         label: "Score Threshold",
         type: "number",
         defaultValue: 40,
-        min: 0,
+        min: 1,
         max: 100,
       },
       {
@@ -293,7 +293,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
         label: "Score Threshold",
         type: "number",
         defaultValue: 40,
-        min: 0,
+        min: 1,
         max: 100,
       },
       {
@@ -583,7 +583,7 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
       args.push(url);
 
       pushBoundedIntegerArg(args, "--count", "count", "Job count", values, 1, 100);
-      pushBoundedIntegerArg(args, "--score-threshold", "scoreThreshold", "Score threshold", values, 0, 100);
+      pushBoundedIntegerArg(args, "--score-threshold", "scoreThreshold", "Score threshold", values, 1, 100);
 
       if (booleanValue("disableAiEvaluation")) {
         args.push("--disable-ai-evaluation");
@@ -625,7 +625,7 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
       args.push(url);
 
       pushBoundedIntegerArg(args, "--count", "count", "Job count", values, 1, 100);
-      pushBoundedIntegerArg(args, "--score-threshold", "scoreThreshold", "Score threshold", values, 0, 100);
+      pushBoundedIntegerArg(args, "--score-threshold", "scoreThreshold", "Score threshold", values, 1, 100);
       pushStringArg(args, "--resume", stringValue("resumePath"));
 
       if (booleanValue("disableAiEvaluation")) {
@@ -648,7 +648,7 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
       args.push(url);
 
       pushBoundedIntegerArg(args, "--count", "count", "Job count", values, 1, 100);
-      pushBoundedIntegerArg(args, "--score-threshold", "scoreThreshold", "Score threshold", values, 0, 100);
+      pushBoundedIntegerArg(args, "--score-threshold", "scoreThreshold", "Score threshold", values, 1, 100);
       pushStringArg(args, "--resume", stringValue("resumePath"));
 
       if (booleanValue("disableAiEvaluation")) {

@@ -194,9 +194,9 @@ describe("run config", () => {
     expect(() =>
       buildRunArgs("explore-batch", {
         url: "https://www.linkedin.com/jobs/collections/easy-apply",
-        scoreThreshold: -1,
+        scoreThreshold: 0,
       }),
-    ).toThrow("Score threshold must be an integer between 0 and 100.");
+    ).toThrow("Score threshold must be an integer between 1 and 100.");
   });
 
   it("does not ship a real LinkedIn job id as a single-run default", () => {
