@@ -35,7 +35,7 @@ export type RunProgressSummary = {
 };
 
 export type RunCurrentActivity = {
-  stage: "starting" | "scanning" | "evaluating" | "applying" | "submitted" | "failed" | "completed" | "stopped";
+  stage: "starting" | "scanning" | "evaluating" | "applying" | "submitted" | "failed" | "completed" | "stopping" | "stopped";
   label: string;
   detail: string | null;
   jobUrl: string | null;
@@ -73,17 +73,32 @@ function sourceForMode(mode?: string): string | null {
 
 export function readRunProgress(args: {
   startedAt: string;
+  finishedAt?: string | null;
+  runId?: string;
   mode?: string;
   limit?: number;
 }): RunProgressSummary {
   const startedAtMs = Date.parse(args.startedAt);
+  const finishedAtMs = args.finishedAt ? Date.parse(args.finishedAt) : null;
   const db = openDb();
   try {
     const source = sourceForMode(args.mode);
     const params: Array<string | number> = [Number.isFinite(startedAtMs) ? startedAtMs : args.startedAt];
+    const finishedSql = finishedAtMs !== null && Number.isFinite(finishedAtMs)
+      ? "AND h.createdAt <= ?"
+      : "";
+    if (finishedSql) {
+      params.push(finishedAtMs as number);
+    }
     const sourceSql = source ? "AND h.source = ?" : "";
     if (source) {
       params.push(source);
+    }
+    const runIdSql = args.runId
+      ? "AND CASE WHEN json_valid(h.detailsJson) THEN json_extract(h.detailsJson, '$.dashboardRunId') ELSE NULL END = ?"
+      : "";
+    if (args.runId) {
+      params.push(args.runId);
     }
 
     const rows = db
@@ -110,7 +125,9 @@ export function readRunProgress(args: {
         FROM JobReviewHistory h
         LEFT JOIN JobPosting j ON j.id = h.jobPostingId
         WHERE h.createdAt >= ?
+        ${finishedSql}
         ${sourceSql}
+        ${runIdSql}
         ORDER BY h.createdAt ASC
         LIMIT ?
         `,
@@ -131,9 +148,11 @@ export function readRunProgress(args: {
       applyDecisionCount: reviews.filter((review) => review.decision === "APPLY").length,
       currentActivity: inferCurrentActivity({
         startedAtMs,
+        finishedAtMs: finishedAtMs !== null && Number.isFinite(finishedAtMs) ? finishedAtMs : null,
+        runId: args.runId,
         reviews,
       }),
-      latestArtifact: readLatestRunArtifact(args.startedAt),
+      latestArtifact: readLatestRunArtifact(args.startedAt, args.finishedAt, args.runId),
       reviews,
     };
   } finally {
@@ -152,6 +171,8 @@ function normalizeCreatedAt(value: string | number): string {
 
 function inferCurrentActivity(args: {
   startedAtMs: number;
+  finishedAtMs: number | null;
+  runId?: string;
   reviews: RunProgressReview[];
 }): RunCurrentActivity | null {
   if (!Number.isFinite(args.startedAtMs)) {
@@ -178,7 +199,7 @@ function inferCurrentActivity(args: {
     location: null,
   };
 
-  for (const entry of readRecentLogEntries(args.startedAtMs)) {
+  for (const entry of readRecentLogEntries(args.startedAtMs, args.finishedAtMs, args.runId)) {
     const updatedAt = new Date(entry.time).toISOString();
     const event = stringValue(entry.event);
     const message = stringValue(entry.msg);
@@ -302,7 +323,11 @@ function inferCurrentActivity(args: {
   return activity;
 }
 
-function readRecentLogEntries(startedAtMs: number): Array<Record<string, unknown> & { time: number }> {
+function readRecentLogEntries(
+  startedAtMs: number,
+  finishedAtMs: number | null,
+  runId?: string,
+): Array<Record<string, unknown> & { time: number }> {
   const logPath = getEngineLogPath();
   const maxBytes = 512 * 1024;
   let content = "";
@@ -335,7 +360,10 @@ function readRecentLogEntries(startedAtMs: number): Array<Record<string, unknown
       }
     })
     .filter((entry): entry is Record<string, unknown> & { time: number } => {
-      return typeof entry?.time === "number" && entry.time >= startedAtMs;
+      return typeof entry?.time === "number"
+        && entry.time >= startedAtMs
+        && (finishedAtMs === null || entry.time <= finishedAtMs)
+        && (!runId || entry.dashboardRunId === runId);
     })
     .sort((left, right) => left.time - right.time);
 }
@@ -389,19 +417,26 @@ function nestedErrorMessage(entry: Record<string, unknown>): string | null {
   return stringValue((error as Record<string, unknown>).message);
 }
 
-function readLatestRunArtifact(startedAt: string): RunProgressSummary["latestArtifact"] {
+function readLatestRunArtifact(
+  startedAt: string,
+  finishedAt?: string | null,
+  runId?: string,
+): RunProgressSummary["latestArtifact"] {
   const batchDir = path.join(getEngineArtifactsPath(), "batch-runs");
   const startedAtMs = Date.parse(startedAt);
+  const finishedAtMs = finishedAt ? Date.parse(finishedAt) : null;
 
   try {
     const candidates = readdirSync(batchDir)
       .filter((name) => name.endsWith(".json"))
+      .filter((name) => !runId || name.includes(`-${runId}-`))
       .map((name) => {
         const fullPath = path.join(batchDir, name);
         const stat = statSync(fullPath);
         return { name, fullPath, stat };
       })
       .filter((entry) => entry.stat.mtimeMs >= startedAtMs)
+      .filter((entry) => finishedAtMs === null || !Number.isFinite(finishedAtMs) || entry.stat.mtimeMs <= finishedAtMs)
       .sort((left, right) => right.stat.mtimeMs - left.stat.mtimeMs);
 
     const latest = candidates[0];

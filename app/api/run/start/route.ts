@@ -1,6 +1,11 @@
 import { buildRunArgs } from "@/lib/run-config";
 import { readEngineConfigStatus } from "@/lib/engine-status";
-import { startEngineRun } from "@/lib/engine-runner";
+import {
+  getRunRegistryState,
+  RunCapacityError,
+  RunResourceConflictError,
+  startEngineRun,
+} from "@/lib/engine-runner";
 import { getBlockingRunChecks } from "@/lib/run-readiness";
 import { parseRunStartPayload, RunRequestValidationError } from "@/lib/run-request";
 import { guardMutationRequest, jsonNoStore } from "@/lib/request-security";
@@ -42,19 +47,27 @@ export async function POST(request: Request) {
 
     const args = buildRunArgs(type, values);
     const run = startEngineRun(args);
-    return jsonNoStore({ run });
+    const state = getRunRegistryState();
+    return jsonNoStore({ run, ...state });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to start run.";
     const status = error instanceof RunRequestValidationError
       ? 400
-      : message === "An engine run is already active."
+      : error instanceof RunCapacityError || error instanceof RunResourceConflictError
         ? 409
         : error instanceof SyntaxError
           ? 400
           : 500;
 
     return jsonNoStore(
-      { error: error instanceof Error ? error.message : "Failed to start run." },
+      {
+        error: message,
+        code: error instanceof RunCapacityError || error instanceof RunResourceConflictError
+          ? error.code
+          : undefined,
+        maxActive: error instanceof RunCapacityError ? error.maxActive : undefined,
+        conflicts: error instanceof RunResourceConflictError ? error.resources : undefined,
+      },
       { status },
     );
   }

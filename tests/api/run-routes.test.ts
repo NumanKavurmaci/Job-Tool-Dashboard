@@ -1,22 +1,92 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getCurrentRunMock, readEngineConfigStatusMock, startEngineRunMock, stopCurrentRunMock } = vi.hoisted(() => ({
-  getCurrentRunMock: vi.fn(),
-  readEngineConfigStatusMock: vi.fn(),
-  startEngineRunMock: vi.fn(),
-  stopCurrentRunMock: vi.fn(),
-}));
+const runnerMocks = vi.hoisted(() => {
+  class RunCapacityError extends Error {
+    readonly code = "RUN_CAPACITY_FULL";
+    readonly maxActive: number;
+
+    constructor(maxActive = 2) {
+      super(`At most ${maxActive} engine runs can be active at once.`);
+      this.maxActive = maxActive;
+    }
+  }
+
+  class RunResourceConflictError extends Error {
+    readonly code = "RUN_RESOURCE_CONFLICT";
+    readonly resources: string[];
+
+    constructor(resources: string[]) {
+      super(`Another active run is using: ${resources.join(", ")}.`);
+      this.resources = resources;
+    }
+  }
+
+  class RunNotFoundError extends Error {
+    readonly code = "RUN_NOT_FOUND";
+    readonly runId: string;
+
+    constructor(runId: string) {
+      super("Engine run was not found.");
+      this.runId = runId;
+    }
+  }
+
+  class RunIdRequiredError extends Error {
+    readonly code = "RUN_ID_REQUIRED";
+
+    constructor() {
+      super("A run id is required when more than one engine run is active.");
+    }
+  }
+
+  return {
+    getCurrentRunMock: vi.fn(),
+    getRunMock: vi.fn(),
+    getRunRegistryStateMock: vi.fn(),
+    readEngineConfigStatusMock: vi.fn(),
+    startEngineRunMock: vi.fn(),
+    stopCurrentRunMock: vi.fn(),
+    stopEngineRunMock: vi.fn(),
+    RunCapacityError,
+    RunResourceConflictError,
+    RunNotFoundError,
+    RunIdRequiredError,
+  };
+});
+
+const {
+  getCurrentRunMock,
+  getRunMock,
+  getRunRegistryStateMock,
+  readEngineConfigStatusMock,
+  startEngineRunMock,
+  stopCurrentRunMock,
+  stopEngineRunMock,
+  RunCapacityError,
+  RunResourceConflictError,
+  RunNotFoundError,
+  RunIdRequiredError,
+} = runnerMocks;
 
 vi.mock("@/lib/engine-runner", () => ({
-  getCurrentRun: getCurrentRunMock,
-  startEngineRun: startEngineRunMock,
-  stopCurrentRun: stopCurrentRunMock,
+  getCurrentRun: runnerMocks.getCurrentRunMock,
+  getRun: runnerMocks.getRunMock,
+  getRunRegistryState: runnerMocks.getRunRegistryStateMock,
+  startEngineRun: runnerMocks.startEngineRunMock,
+  stopCurrentRun: runnerMocks.stopCurrentRunMock,
+  stopEngineRun: runnerMocks.stopEngineRunMock,
+  RunCapacityError: runnerMocks.RunCapacityError,
+  RunResourceConflictError: runnerMocks.RunResourceConflictError,
+  RunNotFoundError: runnerMocks.RunNotFoundError,
+  RunIdRequiredError: runnerMocks.RunIdRequiredError,
 }));
 
 vi.mock("@/lib/engine-status", () => ({
-  readEngineConfigStatus: readEngineConfigStatusMock,
+  readEngineConfigStatus: runnerMocks.readEngineConfigStatusMock,
 }));
 
+import { GET as getCurrentRuns } from "@/app/api/run/current/route";
+import { POST as stopRunById } from "@/app/api/run/[id]/stop/route";
 import { POST as startRun } from "@/app/api/run/start/route";
 import { POST as stopRun } from "@/app/api/run/stop/route";
 
@@ -42,12 +112,25 @@ function requestFor(path: string, body?: unknown, origin = "http://127.0.0.1:300
   });
 }
 
+function runContext(id: string) {
+  return { params: Promise.resolve({ id }) };
+}
+
 describe("run API routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     readEngineConfigStatusMock.mockResolvedValue({ checks: readyChecks, ready: true });
     startEngineRunMock.mockImplementation((args: string[]) => ({ id: "run-1", args, status: "running" }));
     getCurrentRunMock.mockReturnValue(null);
+    getRunMock.mockReturnValue(null);
+    getRunRegistryStateMock.mockReturnValue({
+      runs: [],
+      activeCount: 0,
+      maxActive: 2,
+      available: 2,
+    });
+    stopCurrentRunMock.mockReturnValue(null);
+    stopEngineRunMock.mockReturnValue(null);
   });
 
   it("defaults an API-started apply run to dry-run", async () => {
@@ -286,13 +369,142 @@ describe("run API routes", () => {
     expect(startEngineRunMock).not.toHaveBeenCalled();
   });
 
-  it("guards stop mutations and marks their responses no-store", async () => {
+  it("keeps the current-run alias while adding the two-run registry state", async () => {
+    const primary = { id: "run-1", status: "running" };
+    const secondary = { id: "run-2", status: "running" };
+    getCurrentRunMock.mockReturnValue(primary);
+    getRunRegistryStateMock.mockReturnValue({
+      runs: [secondary, primary],
+      activeCount: 2,
+      maxActive: 2,
+      available: 0,
+    });
+
+    const response = await getCurrentRuns();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    await expect(response.json()).resolves.toEqual({
+      run: primary,
+      runs: [secondary, primary],
+      activeCount: 2,
+      maxActive: 2,
+      available: 0,
+    });
+  });
+
+  it("returns a typed 409 when the run registry is at capacity", async () => {
+    startEngineRunMock.mockImplementation(() => {
+      throw new RunCapacityError(2);
+    });
+
+    const response = await startRun(
+      requestFor("/api/run/start", {
+        type: "score",
+        values: { url: "https://example.com/jobs/123" },
+      }),
+    );
+
+    expect(response.status).toBe(409);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    await expect(response.json()).resolves.toMatchObject({
+      code: "RUN_CAPACITY_FULL",
+      maxActive: 2,
+    });
+  });
+
+  it("returns a typed 409 with the conflicting exclusive resources", async () => {
+    startEngineRunMock.mockImplementation(() => {
+      throw new RunResourceConflictError(["profile:linkedin"]);
+    });
+
+    const response = await startRun(
+      requestFor("/api/run/start", {
+        type: "easy-apply",
+        values: { url: "https://www.linkedin.com/jobs/view/123/" },
+      }),
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "RUN_RESOURCE_CONFLICT",
+      conflicts: ["profile:linkedin"],
+    });
+  });
+
+  it("guards the legacy stop mutation and preserves its no-id fallback", async () => {
     const blocked = await stopRun(requestFor("/api/run/stop", undefined, "https://attacker.example"));
     const allowed = await stopRun(requestFor("/api/run/stop"));
 
     expect(blocked.status).toBe(403);
     expect(allowed.status).toBe(200);
     expect(allowed.headers.get("cache-control")).toContain("no-store");
-    expect(stopCurrentRunMock).toHaveBeenCalledTimes(1);
+    expect(stopCurrentRunMock).toHaveBeenCalledOnce();
+    expect(stopCurrentRunMock).toHaveBeenCalledWith(undefined);
+  });
+
+  it("lets the legacy stop route target an optional run id", async () => {
+    const response = await stopRun(requestFor("/api/run/stop", { runId: " run-2 " }));
+
+    expect(response.status).toBe(200);
+    expect(stopCurrentRunMock).toHaveBeenCalledWith("run-2");
+  });
+
+  it("requires a run id when the legacy stop route is ambiguous", async () => {
+    stopCurrentRunMock.mockImplementation(() => {
+      throw new RunIdRequiredError();
+    });
+
+    const response = await stopRun(requestFor("/api/run/stop"));
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "RUN_ID_REQUIRED",
+    });
+  });
+
+  it("stops a specific run through the canonical targeted route", async () => {
+    const run = { id: "run-2", status: "stopping" };
+    stopEngineRunMock.mockReturnValue(run);
+    getRunMock.mockReturnValue(run);
+
+    const response = await stopRunById(
+      requestFor("/api/run/run-2/stop"),
+      runContext("run-2"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    expect(stopEngineRunMock).toHaveBeenCalledWith("run-2");
+    expect(getRunMock).toHaveBeenCalledWith("run-2");
+    await expect(response.json()).resolves.toEqual({ run });
+  });
+
+  it("rejects cross-origin targeted stop requests before touching the runner", async () => {
+    const response = await stopRunById(
+      requestFor("/api/run/run-2/stop", undefined, "https://attacker.example"),
+      runContext("run-2"),
+    );
+
+    expect(response.status).toBe(403);
+    expect(stopEngineRunMock).not.toHaveBeenCalled();
+    expect(getRunMock).not.toHaveBeenCalled();
+  });
+
+  it("returns a typed 404 when the targeted run does not exist", async () => {
+    stopEngineRunMock.mockImplementation(() => {
+      throw new RunNotFoundError("missing-run");
+    });
+
+    const response = await stopRunById(
+      requestFor("/api/run/missing-run/stop"),
+      runContext("missing-run"),
+    );
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    await expect(response.json()).resolves.toMatchObject({
+      code: "RUN_NOT_FOUND",
+    });
   });
 });

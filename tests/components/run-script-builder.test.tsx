@@ -7,6 +7,9 @@ describe("RunScriptBuilder", () => {
     const html = renderToStaticMarkup(<RunScriptBuilder />);
 
     expect(html).toContain("Run from dashboard");
+    expect(html).toContain("Two isolated slots are available");
+    expect(html).toContain("0/2 are active");
+    expect(html).toContain("Both run slots are available");
     expect(html).toContain("Start Run");
     expect(html).toContain("Local readiness");
     expect(html).toContain("Latest job outcomes");
