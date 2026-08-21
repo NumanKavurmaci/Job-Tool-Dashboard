@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
 import { getCurrentRun } from "@/lib/engine-runner";
+import { jsonNoStore } from "@/lib/request-security";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function GET() {
-  return NextResponse.json({ run: getCurrentRun() });
+  return jsonNoStore({ run: getCurrentRun() });
 }

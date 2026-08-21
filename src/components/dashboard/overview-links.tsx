@@ -7,7 +7,7 @@ const sections = [
   {
     href: "/run" as Route,
     title: "Run",
-    description: "Generate ready-to-paste PowerShell `tsx` scripts from structured dashboard options.",
+    description: "Check readiness, start or stop the engine, monitor progress, and keep a CLI fallback.",
     icon: PlaySquare,
   },
   {

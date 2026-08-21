@@ -1,26 +1,41 @@
+import { HomeHighlightsSection } from "@/components/dashboard/home-highlights-section";
+import { HomeOperationsSection } from "@/components/dashboard/home-operations-section";
 import { OverviewLinks } from "@/components/dashboard/overview-links";
-import { OverviewPanel } from "@/components/dashboard/overview-panel";
 import { PageIntro } from "@/components/dashboard/page-intro";
 import { PageShell } from "@/components/dashboard/page-shell";
 import { StatsOverview } from "@/components/dashboard/stats-overview";
-import { readDashboardStats } from "@/lib/engine-db";
-import { getEngineRoot } from "@/lib/engine-paths";
+import { getDashboardData } from "@/lib/dashboard-data";
+import { readEngineConfigStatus } from "@/lib/engine-status";
+import { getCurrentRun } from "@/lib/engine-runner";
+import { getBlockingRunChecks } from "@/lib/run-readiness";
 
 export const dynamic = "force-dynamic";
 
-export default function HomePage() {
-  const stats = readDashboardStats();
-  const engineRoot = getEngineRoot();
+export default async function HomePage() {
+  const data = getDashboardData();
+  const configStatus = await readEngineConfigStatus();
+  const currentRun = getCurrentRun();
+  const runBlockers = getBlockingRunChecks("apply-batch", configStatus.checks);
 
   return (
     <PageShell>
       <PageIntro
         eyebrow="Overview"
-        title="A cleaner command center for the engine's latest output."
-        subtitle="This homepage stays intentionally light. Use the quick stats here, then jump into dedicated pages when you want the full story."
+        title="Operate the engine from what needs attention now."
+        subtitle="See the active run, unblock prerequisites, recover incomplete applications, then inspect deeper history when needed."
       />
-      <StatsOverview stats={stats} />
-      <OverviewPanel engineRoot={engineRoot} stats={stats} />
+      <HomeOperationsSection
+        currentRun={currentRun}
+        incompleteCount={data.stats.incompleteApplyCount}
+        runBlockers={runBlockers}
+      />
+      <StatsOverview stats={data.stats} />
+      <HomeHighlightsSection
+        topApplications={data.topApplications}
+        incompleteApplications={data.incompleteApplications}
+        topMissedHighScoreJobs={data.topMissedHighScoreJobs}
+        topPendingApprovedJobs={data.topPendingApprovedJobs}
+      />
       <OverviewLinks />
     </PageShell>
   );

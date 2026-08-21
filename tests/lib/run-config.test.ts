@@ -147,6 +147,48 @@ describe("run config", () => {
     ]);
   });
 
+  it("defaults every apply command to dry-run unless false is explicit", () => {
+    expect(
+      buildRunArgs("apply", {
+        url: "https://www.linkedin.com/jobs/view/123/",
+      }),
+    ).toContain("--dry-run");
+    expect(
+      buildRunArgs("external-apply", {
+        url: "https://jobs.example.com/apply/123",
+      }),
+    ).toContain("--dry-run");
+    expect(
+      buildRunArgs("easy-apply", {
+        url: "https://www.linkedin.com/jobs/view/123/",
+        dryRun: false,
+      }),
+    ).not.toContain("--dry-run");
+  });
+
+  it("rejects out-of-range batch counts and thresholds", () => {
+    expect(() =>
+      buildRunArgs("apply-batch", {
+        url: "https://www.linkedin.com/jobs/collections/easy-apply",
+        count: 101,
+      }),
+    ).toThrow("Job count must be an integer between 1 and 100.");
+    expect(() =>
+      buildRunArgs("explore-batch", {
+        url: "https://www.linkedin.com/jobs/collections/easy-apply",
+        scoreThreshold: -1,
+      }),
+    ).toThrow("Score threshold must be an integer between 0 and 100.");
+  });
+
+  it("does not ship a real LinkedIn job id as a single-run default", () => {
+    for (const type of ["explore", "easy-apply", "apply", "decide"] as const) {
+      const urlField = getRunScriptDefinition(type).fields.find((field) => field.key === "url");
+      expect(urlField?.defaultValue).toBeUndefined();
+      expect(urlField?.placeholder).toContain("JOB_ID");
+    }
+  });
+
   it("builds resume-incomplete args with an optional batch report path", () => {
     expect(buildRunArgs("resume-incomplete", {})).toEqual([
       "resume-incomplete",
@@ -182,11 +224,12 @@ describe("run config", () => {
     );
   });
 
-  it("advertises ReactJobs scoring and Workable external apply examples", () => {
+  it("advertises Kariyer/ReactJobs scoring and Workable external apply examples", () => {
     const scoreDefinition = getRunScriptDefinition("score");
     const externalApplyDefinition = getRunScriptDefinition("external-apply");
 
     expect(scoreDefinition.description).toContain("ReactJobs");
+    expect(scoreDefinition.description).toContain("Kariyer.net");
     expect(scoreDefinition.fields.find((field) => field.key === "url")?.placeholder).toContain(
       "reactjobs.io/react-jobs/",
     );

@@ -8,13 +8,16 @@ import {
   buildRunArgs,
   buildGeneratedRunScript,
   getRunScriptDefinition,
+  isApplyRunType,
   type RunFieldDefinition,
   type RunFormValues,
   type RunScriptType,
 } from "@/lib/run-config";
+import { getBlockingRunChecks } from "@/lib/run-readiness";
 
 type ConfigStatus = {
   ready: boolean;
+  llmProvider: "openai" | "local" | null;
   localLlmBaseUrl: string | null;
   checks: Array<{
     key: string;
@@ -100,8 +103,7 @@ function outcomeTone(review: RunProgressReview) {
 }
 
 function isLiveApplyRun(type: RunScriptType, values: RunFormValues) {
-  return ["apply", "apply-batch", "easy-apply", "easy-apply-batch", "external-apply"].includes(type)
-    && values.dryRun !== true;
+  return isApplyRunType(type) && values.dryRun === false;
 }
 
 function buildInitialValues(scriptType: RunScriptType): RunFormValues {
@@ -155,6 +157,14 @@ function FieldInput({
     );
   }
 
+  const inputValue = field.type === "number"
+    ? typeof value === "number" || typeof value === "string"
+      ? value
+      : typeof field.defaultValue === "number"
+        ? field.defaultValue
+        : ""
+    : String(value ?? "");
+
   return (
     <label className="space-y-2">
       <div className="flex items-center justify-between gap-3">
@@ -164,11 +174,16 @@ function FieldInput({
       <input
         className="w-full rounded-2xl border border-line bg-black/20 px-4 py-3 text-sm text-text outline-none transition focus:border-blue-400"
         min={field.type === "number" ? field.min : undefined}
+        max={field.type === "number" ? field.max : undefined}
         placeholder={field.placeholder}
         type={field.type}
-        value={field.type === "number" ? Number(value ?? field.defaultValue ?? 0) : String(value ?? "")}
+        value={inputValue}
         onChange={(event) =>
-          onChange(field.type === "number" ? Number(event.target.value) : event.target.value)
+          onChange(
+            field.type === "number" && event.target.value !== ""
+              ? Number(event.target.value)
+              : event.target.value,
+          )
         }
       />
       {field.description ? <p className="text-xs text-muted">{field.description}</p> : null}
@@ -199,6 +214,13 @@ export function RunScriptBuilder() {
     [],
   );
   const selectedIsAdvanced = definition.category !== "primary";
+  const liveApplyEnabled = isLiveApplyRun(scriptType, values);
+  const blockingChecks = useMemo(
+    () => (status ? getBlockingRunChecks(scriptType, status.checks) : []),
+    [scriptType, status],
+  );
+  const readinessPending = status === null;
+  const runIsBlocked = readinessPending || blockingChecks.length > 0;
 
   const generated = useMemo(() => {
     try {
@@ -282,6 +304,15 @@ export function RunScriptBuilder() {
     setRunError(null);
     if (generated.error) {
       setRunError(generated.error);
+      return;
+    }
+
+    if (runIsBlocked) {
+      setRunError(
+        readinessPending
+          ? "Readiness checks are still loading."
+          : `Resolve the required checks first: ${blockingChecks.map((check) => check.label).join(", ")}.`,
+      );
       return;
     }
 
@@ -430,6 +461,30 @@ export function RunScriptBuilder() {
             />
           ))}
         </div>
+
+        {definition.caution ? (
+          <div
+            className={`rounded-2xl border p-4 ${
+              liveApplyEnabled
+                ? "border-rose-400/40 bg-rose-400/15 text-rose-100"
+                : "border-amber-400/25 bg-amber-400/10 text-amber-100"
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
+              <div>
+                <p className="text-sm font-semibold">
+                  {liveApplyEnabled ? "Live application is enabled" : "Dry-run safety is enabled"}
+                </p>
+                <p className="mt-1 text-xs leading-5">
+                  {liveApplyEnabled
+                    ? definition.caution
+                    : "The engine will stop before final submission. Clear Dry Run only when you intend to use the live path."}
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </Card>
 
       <div className="space-y-5">
@@ -461,8 +516,8 @@ export function RunScriptBuilder() {
             {currentRun?.progress?.latestArtifact ? (
               <Badge tone="apply">Artifact ready</Badge>
             ) : null}
-            {isLiveApplyRun(scriptType, values) ? (
-              <Badge tone="neutral">Live apply</Badge>
+            {liveApplyEnabled ? (
+              <Badge tone="skip">LIVE APPLY</Badge>
             ) : (
               <Badge tone="info">Dry or non-submit</Badge>
             )}
@@ -503,12 +558,12 @@ export function RunScriptBuilder() {
           <div className="flex flex-wrap gap-3">
             <button
               className="inline-flex items-center gap-2 rounded-2xl bg-blue-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={Boolean(generated.error) || isStarting || currentRun?.status === "running"}
+              disabled={Boolean(generated.error) || runIsBlocked || isStarting || currentRun?.status === "running"}
               type="button"
               onClick={startRun}
             >
               <Play className="size-4" aria-hidden="true" />
-              {isStarting ? "Starting" : "Start Run"}
+              {isStarting ? "Starting" : liveApplyEnabled ? "Start LIVE Run" : "Start Run"}
             </button>
             <button
               className="inline-flex items-center gap-2 rounded-2xl border border-line bg-black/20 px-4 py-3 text-sm font-semibold text-text transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
@@ -550,6 +605,28 @@ export function RunScriptBuilder() {
             title="Local readiness"
             subtitle="These checks cover the engine folder, stored data, resume, LinkedIn session, and LM Studio connection."
           />
+          <div
+            className={`rounded-2xl border p-4 ${
+              readinessPending
+                ? "border-line bg-black/20"
+                : blockingChecks.length > 0
+                  ? "border-amber-400/25 bg-amber-400/10"
+                  : "border-emerald-400/25 bg-emerald-400/10"
+            }`}
+          >
+            <p className="text-sm font-semibold text-text">
+              {readinessPending
+                ? "Checking required services..."
+                : blockingChecks.length > 0
+                  ? `${blockingChecks.length} required check${blockingChecks.length === 1 ? "" : "s"} block this run`
+                  : `${definition.label} is ready to start`}
+            </p>
+            {blockingChecks.length > 0 ? (
+              <p className="mt-1 text-xs text-amber-100">
+                {blockingChecks.map((check) => check.label).join(" · ")}
+              </p>
+            ) : null}
+          </div>
           <div className="grid gap-3 md:grid-cols-2">
             {(status?.checks ?? []).map((check) => (
               <div key={check.key} className="rounded-2xl border border-line bg-black/20 p-4">

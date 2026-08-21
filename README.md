@@ -13,7 +13,7 @@ Job Tool Dashboard turns the local `Job Tool` engine workspace into a readable, 
 
 | Page | Purpose |
 | --- | --- |
-| `/` | Overview cards, stats, health signals, and quick navigation. |
+| `/` | Active run, readiness blockers, incomplete applications, operational highlights, and quick actions. |
 | `/run` | Start/stop engine runs, view live progress, inspect current job activity, and copy CLI fallback scripts. |
 | `/recommendations` | Explore-mode recommendations with score, decision, and policy context. |
 | `/reviews` | Job review history from `JobReviewHistory`. |
@@ -52,13 +52,13 @@ flowchart LR
   API --> Artifacts
 ```
 
-The API routes are local only inside your Next.js server. The dashboard reads:
+The server binds to `127.0.0.1`, rejects non-loopback hosts, and protects mutating API requests with same-origin checks. The dashboard reads:
 
 - `prisma/dev.db`
 - `logs/app.log`
 - `artifacts/*`
 - `.env`
-- `.auth/linkedin-session.json`
+- LinkedIn session readiness (without exposing session contents)
 - `user/resume.pdf`
 
 ## ▶️ Run Control
@@ -67,13 +67,15 @@ The `/run` page can start engine commands from the dashboard and follow their ou
 
 Current controls include:
 
-- local readiness checks for engine folder, database, logs, resume, LinkedIn session, and LM Studio
+- command-aware readiness checks for engine folder, database, logs, resume, LinkedIn session, and the configured LLM provider
 - `Start Run` for configured engine commands
 - `Stop` using Windows process-tree termination when needed
 - live refresh while a run is active
 - current activity such as scanning, evaluating, applying, submitted, failed
 - latest job outcomes with role, company, score, decision, and summary
 - generated PowerShell fallback scripts for manual runs
+
+The `DRY Run` toggle is the live-application control. It defaults to enabled when a request omits the value; turning it off is the explicit instruction to allow a live apply. No second confirmation dialog is required.
 
 The dashboard intentionally hides raw PID details from the main UI because process IDs are not useful for normal run monitoring.
 
@@ -130,6 +132,13 @@ npm test             # Vitest suite
 | `POST /api/run/stop` | Stop the active engine run. |
 | `GET /api/run/current` | Return active run state and computed progress. |
 | `GET /api/run/:id/events` | Server-sent events for run updates. |
+
+## 🛡️ Local Security Boundary
+
+- Run payloads accept only known commands and fields, bounded numeric values, public HTTPS job/provider URLs, and engine-contained regular file paths.
+- Artifact detail reads enforce category/name containment, reject symlinks and oversized JSON, and recursively redact secrets.
+- API responses use `no-store`; run start/stop routes require a loopback host and matching origin.
+- CSP and baseline browser security headers are set by Next.js.
 
 ## ✅ Verification
 

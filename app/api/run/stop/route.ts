@@ -1,9 +1,15 @@
-import { NextResponse } from "next/server";
 import { getCurrentRun, stopCurrentRun } from "@/lib/engine-runner";
+import { guardMutationRequest, jsonNoStore } from "@/lib/request-security";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
-export async function POST() {
+export async function POST(request: Request) {
+  const guardResponse = guardMutationRequest(request);
+  if (guardResponse) {
+    return guardResponse;
+  }
+
   stopCurrentRun();
-  return NextResponse.json({ run: getCurrentRun() });
+  return jsonNoStore({ run: getCurrentRun() });
 }

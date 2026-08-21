@@ -1,6 +1,8 @@
 import { subscribeToRun, type EngineRunEvent } from "@/lib/engine-runner";
+import { NO_STORE_HEADERS } from "@/lib/request-security";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 function encodeEvent(event: EngineRunEvent) {
   return `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`;
@@ -39,9 +41,10 @@ export async function GET(
 
   return new Response(stream, {
     headers: {
-      "Cache-Control": "no-cache, no-transform",
+      ...NO_STORE_HEADERS,
       Connection: "keep-alive",
       "Content-Type": "text/event-stream",
+      "X-Accel-Buffering": "no",
     },
   });
 }

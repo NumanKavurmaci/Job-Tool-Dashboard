@@ -11,10 +11,33 @@ export type EngineStatusCheck = {
 
 export type EngineConfigStatus = {
   engineRoot: string;
+  llmProvider: "openai" | "local" | null;
   localLlmBaseUrl: string | null;
   checks: EngineStatusCheck[];
   ready: boolean;
 };
+
+function configuredValue(env: Record<string, string>, key: string): string | null {
+  const value = env[key]?.trim();
+  if (!value || (key === "OPENAI_API_KEY" && /^your[_-]?key[_-]?here$/i.test(value))) {
+    return null;
+  }
+  return value;
+}
+
+function resolveLlmProvider(env: Record<string, string>): "openai" | "local" | null {
+  const configured = configuredValue(env, "LLM_PROVIDER");
+  if (configured === "openai" || configured === "local") {
+    return configured;
+  }
+  if (configured) {
+    return null;
+  }
+
+  return configuredValue(env, "LOCAL_LLM_BASE_URL") && configuredValue(env, "LOCAL_LLM_MODEL")
+    ? "local"
+    : "openai";
+}
 
 function readEngineEnv(): Record<string, string> {
   const envPath = path.join(getEngineRoot(), ".env");
@@ -64,7 +87,7 @@ function findResumeCandidate(): string | null {
 async function checkLocalLlm(baseUrl: string | null): Promise<EngineStatusCheck> {
   if (!baseUrl) {
     return {
-      key: "localLlm",
+      key: "llm",
       label: "LM Studio",
       ok: false,
       detail: "LOCAL_LLM_BASE_URL is not configured.",
@@ -78,14 +101,14 @@ async function checkLocalLlm(baseUrl: string | null): Promise<EngineStatusCheck>
     });
 
     return {
-      key: "localLlm",
+      key: "llm",
       label: "LM Studio",
       ok: response.ok,
       detail: response.ok ? `Online at ${normalized}` : `Responded with HTTP ${response.status}.`,
     };
   } catch {
     return {
-      key: "localLlm",
+      key: "llm",
       label: "LM Studio",
       ok: false,
       detail: `Not reachable at ${normalized}.`,
@@ -93,10 +116,51 @@ async function checkLocalLlm(baseUrl: string | null): Promise<EngineStatusCheck>
   }
 }
 
+async function checkLlmProvider(
+  env: Record<string, string>,
+  provider: "openai" | "local" | null,
+  localLlmBaseUrl: string | null,
+): Promise<EngineStatusCheck> {
+  if (!provider) {
+    return {
+      key: "llm",
+      label: "LLM provider",
+      ok: false,
+      detail: "LLM_PROVIDER must be openai or local.",
+    };
+  }
+
+  if (provider === "openai") {
+    const apiKey = configuredValue(env, "OPENAI_API_KEY");
+    return {
+      key: "llm",
+      label: "OpenAI",
+      ok: Boolean(apiKey),
+      detail: apiKey
+        ? `Configured for ${configuredValue(env, "OPENAI_MODEL") ?? "gpt-4.1-mini"}.`
+        : "OPENAI_API_KEY is not configured.",
+    };
+  }
+
+  if (!configuredValue(env, "LOCAL_LLM_MODEL")) {
+    return {
+      key: "llm",
+      label: "LM Studio",
+      ok: false,
+      detail: "LOCAL_LLM_MODEL is not configured.",
+    };
+  }
+
+  return checkLocalLlm(localLlmBaseUrl);
+}
+
 export async function readEngineConfigStatus(): Promise<EngineConfigStatus> {
   const engineRoot = getEngineRoot();
   const env = readEngineEnv();
-  const localLlmBaseUrl = env.LOCAL_LLM_BASE_URL ?? "http://127.0.0.1:1234/v1";
+  const llmProvider = resolveLlmProvider(env);
+  const localLlmBaseUrl = llmProvider === "local"
+    ? configuredValue(env, "LOCAL_LLM_BASE_URL")
+    : null;
   const packagePath = path.join(engineRoot, "package.json");
   const sessionPath = path.join(engineRoot, env.LINKEDIN_SESSION_STATE_PATH ?? ".auth/linkedin-session.json");
   const profilePath = path.join(engineRoot, env.LINKEDIN_BROWSER_PROFILE_PATH ?? ".auth/linkedin-profile");
@@ -145,11 +209,12 @@ export async function readEngineConfigStatus(): Promise<EngineConfigStatus> {
       ok: existsSync(sessionPath) || existsSync(profilePath),
       detail: existsSync(sessionPath) ? sessionPath : profilePath,
     },
-    await checkLocalLlm(localLlmBaseUrl),
+    await checkLlmProvider(env, llmProvider, localLlmBaseUrl),
   ];
 
   return {
     engineRoot,
+    llmProvider,
     localLlmBaseUrl,
     checks,
     ready: checks.every((check) => check.ok),

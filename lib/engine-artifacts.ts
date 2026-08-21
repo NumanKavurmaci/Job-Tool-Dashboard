@@ -1,6 +1,6 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { lstatSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
-import { getEngineArtifactsPath } from "./engine-paths";
+import { getEngineArtifactsPath, getEngineRoot } from "./engine-paths";
 
 export type ParsedArtifactDetails = {
   mode?: string | null;
@@ -91,6 +91,9 @@ export type ArtifactSummary = {
 };
 
 const ARTIFACT_CATEGORIES = ["batch-runs", "easy-apply-runs", "external-apply-runs", "screenshots"];
+export const MAX_ARTIFACT_JSON_BYTES = 2 * 1024 * 1024;
+const MAX_ARTIFACT_PREVIEW_CHARS = 1200;
+const SENSITIVE_ARTIFACT_KEY = /(?:authorization|cookie|credential|password|secret|session|storage.?state|token|api.?key)/i;
 
 export function buildArtifactId(category: string, name: string): string {
   return `${encodeURIComponent(category)}--${encodeURIComponent(name)}`;
@@ -112,9 +115,102 @@ function parseArtifactId(id: string): { category: string; name: string } | null 
   }
 }
 
-function readJsonArtifact(fullPath: string): unknown | null {
+function isPathInside(parentPath: string, candidatePath: string): boolean {
+  const relative = path.relative(parentPath, candidatePath);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function resolveArtifactPath(category: string, name: string): string | null {
+  if (!ARTIFACT_CATEGORIES.includes(category)) {
+    return null;
+  }
+
+  if (
+    !name ||
+    name === "." ||
+    name === ".." ||
+    name.includes("\0") ||
+    /[\\/]/.test(name) ||
+    path.basename(name) !== name
+  ) {
+    return null;
+  }
+
+  try {
+    const configuredArtifactsRoot = getEngineArtifactsPath();
+    if (lstatSync(configuredArtifactsRoot).isSymbolicLink()) {
+      return null;
+    }
+
+    const engineRoot = realpathSync(getEngineRoot());
+    const artifactsRoot = realpathSync(configuredArtifactsRoot);
+    if (!isPathInside(engineRoot, artifactsRoot)) {
+      return null;
+    }
+
+    const categoryPath = path.join(configuredArtifactsRoot, category);
+    if (lstatSync(categoryPath).isSymbolicLink()) {
+      return null;
+    }
+
+    const categoryRoot = realpathSync(categoryPath);
+    if (!isPathInside(artifactsRoot, categoryRoot)) {
+      return null;
+    }
+
+    const candidatePath = path.resolve(categoryRoot, name);
+    if (path.dirname(candidatePath) !== categoryRoot) {
+      return null;
+    }
+
+    const candidateStat = lstatSync(candidatePath);
+    if (!candidateStat.isFile() || candidateStat.isSymbolicLink()) {
+      return null;
+    }
+
+    const realCandidatePath = realpathSync(candidatePath);
+    return isPathInside(categoryRoot, realCandidatePath) ? realCandidatePath : null;
+  } catch {
+    return null;
+  }
+}
+
+function redactSensitiveArtifactValues(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(redactSensitiveArtifactValues);
+  }
+
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, nestedValue]) => [
+      key,
+      SENSITIVE_ARTIFACT_KEY.test(key) ? "[REDACTED]" : redactSensitiveArtifactValues(nestedValue),
+    ]),
+  );
+}
+
+function readJsonArtifact(fullPath: string, size: number): unknown | null {
+  if (size > MAX_ARTIFACT_JSON_BYTES) {
+    return null;
+  }
+
   try {
     return JSON.parse(readFileSync(fullPath, "utf8")) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function buildJsonPreview(payload: unknown): string | null {
+  if (payload == null) {
+    return null;
+  }
+
+  try {
+    return JSON.stringify(redactSensitiveArtifactValues(payload)).slice(0, MAX_ARTIFACT_PREVIEW_CHARS);
   } catch {
     return null;
   }
@@ -544,39 +640,30 @@ function parseArtifactDetails(payload: unknown): ParsedArtifactDetails | null {
 }
 
 export function readRecentArtifacts(limit = 12): ArtifactSummary[] {
-  const base = getEngineArtifactsPath();
-  const rows: ArtifactSummary[] = [];
+  const candidates: Array<{
+    category: string;
+    fullPath: string;
+    name: string;
+    size: number;
+    updatedAt: string;
+  }> = [];
 
   for (const category of ARTIFACT_CATEGORIES) {
-    const dir = path.join(base, category);
     try {
-      const files = readdirSync(dir);
+      const files = readdirSync(path.join(getEngineArtifactsPath(), category));
       for (const file of files) {
-        const fullPath = path.join(dir, file);
+        const fullPath = resolveArtifactPath(category, file);
+        if (!fullPath) continue;
+
         const stat = statSync(fullPath);
         if (!stat.isFile()) continue;
 
-        const payload = file.endsWith(".json") ? readJsonArtifact(fullPath) : null;
-        const preview =
-          file.endsWith(".json")
-            ? (() => {
-                try {
-                  return readFileSync(fullPath, "utf8").slice(0, 1200);
-                } catch {
-                  return null;
-                }
-              })()
-            : null;
-
-        rows.push({
-          id: buildArtifactId(category, file),
+        candidates.push({
           name: file,
           category,
           fullPath,
           updatedAt: stat.mtime.toISOString(),
           size: stat.size,
-          preview,
-          details: payload ? parseArtifactDetails(payload) : null,
         });
       }
     } catch {
@@ -584,9 +671,21 @@ export function readRecentArtifacts(limit = 12): ArtifactSummary[] {
     }
   }
 
-  return rows
+  return candidates
     .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
-    .slice(0, limit);
+    .slice(0, Math.max(0, limit))
+    .map((candidate) => {
+      const payload = candidate.name.toLowerCase().endsWith(".json")
+        ? readJsonArtifact(candidate.fullPath, candidate.size)
+        : null;
+
+      return {
+        ...candidate,
+        id: buildArtifactId(candidate.category, candidate.name),
+        preview: buildJsonPreview(payload),
+        details: payload ? parseArtifactDetails(payload) : null,
+      };
+    });
 }
 
 export function readArtifactById(id: string): ArtifactSummary | null {
@@ -595,7 +694,10 @@ export function readArtifactById(id: string): ArtifactSummary | null {
     return null;
   }
 
-  const fullPath = path.join(getEngineArtifactsPath(), parsed.category, parsed.name);
+  const fullPath = resolveArtifactPath(parsed.category, parsed.name);
+  if (!fullPath) {
+    return null;
+  }
 
   try {
     const stat = statSync(fullPath);
@@ -603,17 +705,9 @@ export function readArtifactById(id: string): ArtifactSummary | null {
       return null;
     }
 
-    const payload = parsed.name.endsWith(".json") ? readJsonArtifact(fullPath) : null;
-    const preview =
-      parsed.name.endsWith(".json")
-        ? (() => {
-            try {
-              return readFileSync(fullPath, "utf8").slice(0, 1200);
-            } catch {
-              return null;
-            }
-          })()
-        : null;
+    const payload = parsed.name.toLowerCase().endsWith(".json")
+      ? readJsonArtifact(fullPath, stat.size)
+      : null;
 
     return {
       id,
@@ -622,7 +716,7 @@ export function readArtifactById(id: string): ArtifactSummary | null {
       fullPath,
       updatedAt: stat.mtime.toISOString(),
       size: stat.size,
-      preview,
+      preview: buildJsonPreview(payload),
       details: payload ? parseArtifactDetails(payload) : null,
     };
   } catch {

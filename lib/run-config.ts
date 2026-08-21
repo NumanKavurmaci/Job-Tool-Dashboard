@@ -24,6 +24,7 @@ export type RunFieldDefinition = {
   defaultValue?: string | number | boolean;
   required?: boolean;
   min?: number;
+  max?: number;
   options?: Array<{ value: string; label: string }>;
 };
 
@@ -38,6 +39,14 @@ export type RunScriptDefinition = {
 
 export type RunFormValues = Record<string, string | number | boolean | undefined>;
 
+export const LIVE_APPLY_RUN_TYPES: RunScriptType[] = [
+  "apply",
+  "apply-batch",
+  "easy-apply",
+  "easy-apply-batch",
+  "external-apply",
+];
+
 export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
   {
     type: "dashboard",
@@ -51,6 +60,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
         type: "number",
         defaultValue: 5,
         min: 1,
+        max: 100,
       },
     ],
   },
@@ -74,13 +84,15 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
         type: "number",
         defaultValue: 25,
         min: 1,
+        max: 100,
       },
       {
         key: "scoreThreshold",
         label: "Score Threshold",
         type: "number",
         defaultValue: 40,
-        min: 1,
+        min: 0,
+        max: 100,
       },
       {
         key: "disableAiEvaluation",
@@ -104,14 +116,14 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
   {
     type: "explore",
     label: "Explore Single",
-    description: "Evaluate one job URL and save its recommendation snapshot without attempting any application flow.",
+    description: "Evaluate one LinkedIn, Kariyer.net, ReactJobs, or supported ATS job URL without entering an application flow.",
     category: "advanced",
     fields: [
       {
         key: "url",
         label: "Job URL",
         type: "text",
-        placeholder: "https://www.linkedin.com/jobs/view/4389593314/",
+        placeholder: "https://www.linkedin.com/jobs/view/JOB_ID/",
         required: true,
       },
       {
@@ -137,9 +149,8 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
         key: "url",
         label: "Job URL",
         type: "text",
-        placeholder: "https://www.linkedin.com/jobs/view/4387396184/",
+        placeholder: "https://www.linkedin.com/jobs/view/JOB_ID/",
         required: true,
-        defaultValue: "https://www.linkedin.com/jobs/view/4387396184/",
       },
       {
         key: "dryRun",
@@ -177,13 +188,15 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
         type: "number",
         defaultValue: 10,
         min: 1,
+        max: 100,
       },
       {
         key: "scoreThreshold",
         label: "Score Threshold",
         type: "number",
         defaultValue: 40,
-        min: 1,
+        min: 0,
+        max: 100,
       },
       {
         key: "disableAiEvaluation",
@@ -230,9 +243,8 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
         key: "url",
         label: "Job URL",
         type: "text",
-        placeholder: "https://www.linkedin.com/jobs/view/4387396184/",
+        placeholder: "https://www.linkedin.com/jobs/view/JOB_ID/",
         required: true,
-        defaultValue: "https://www.linkedin.com/jobs/view/4387396184/",
       },
       {
         key: "dryRun",
@@ -273,13 +285,15 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
         type: "number",
         defaultValue: 25,
         min: 1,
+        max: 100,
       },
       {
         key: "scoreThreshold",
         label: "Score Threshold",
         type: "number",
         defaultValue: 40,
-        min: 1,
+        min: 0,
+        max: 100,
       },
       {
         key: "disableAiEvaluation",
@@ -361,14 +375,14 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
   {
     type: "decide",
     label: "Decide",
-    description: "Run a single-job analysis and produce the engine's final decision.",
+    description: "Run a single-job analysis for LinkedIn, Kariyer.net, ReactJobs, or a supported ATS and produce the final decision.",
     category: "advanced",
     fields: [
       {
         key: "url",
         label: "Job URL",
         type: "text",
-        placeholder: "https://www.linkedin.com/jobs/view/4389593314/",
+        placeholder: "https://www.linkedin.com/jobs/view/JOB_ID/",
         required: true,
       },
       {
@@ -386,7 +400,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
   {
     type: "score",
     label: "Score",
-    description: "Run single-job scoring for a supported detail page, including ReactJobs URLs.",
+    description: "Score a supported detail page from LinkedIn, Kariyer.net, ReactJobs, Greenhouse, Lever, Ashby, or another public ATS.",
     category: "advanced",
     fields: [
       {
@@ -471,12 +485,55 @@ export function getRunScriptDefinition(type: RunScriptType): RunScriptDefinition
   return definition;
 }
 
+export function isRunScriptType(value: unknown): value is RunScriptType {
+  return typeof value === "string" && RUN_SCRIPT_DEFINITIONS.some((definition) => definition.type === value);
+}
+
+export function isApplyRunType(type: RunScriptType): boolean {
+  return LIVE_APPLY_RUN_TYPES.includes(type);
+}
+
 function pushStringArg(args: string[], flag: string, value: string | number | boolean | undefined) {
   if (value === undefined || value === null || value === "") {
     return;
   }
 
   args.push(flag, String(value));
+}
+
+function boundedIntegerValue(
+  key: string,
+  label: string,
+  values: RunFormValues,
+  min: number,
+  max: number,
+): number | null {
+  const value = values[key];
+  if (value === undefined || value === "") {
+    return null;
+  }
+
+  const numberValue = typeof value === "number" ? value : Number(value);
+  if (!Number.isInteger(numberValue) || numberValue < min || numberValue > max) {
+    throw new Error(`${label} must be an integer between ${min} and ${max}.`);
+  }
+
+  return numberValue;
+}
+
+function pushBoundedIntegerArg(
+  args: string[],
+  flag: string,
+  key: string,
+  label: string,
+  values: RunFormValues,
+  min: number,
+  max: number,
+) {
+  const value = boundedIntegerValue(key, label, values, min, max);
+  if (value !== null) {
+    args.push(flag, String(value));
+  }
 }
 
 export function buildRunArgs(type: RunScriptType, values: RunFormValues): string[] {
@@ -495,7 +552,7 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
 
   switch (type) {
     case "dashboard": {
-      pushStringArg(args, "--limit", stringValue("limit"));
+      pushBoundedIntegerArg(args, "--limit", "limit", "Limit", values, 1, 100);
       return args;
     }
     case "score":
@@ -524,12 +581,8 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
       }
       args.push(url);
 
-      const count = stringValue("count");
-      if (count !== undefined && count !== "") {
-        args.push("--count", String(count));
-      }
-
-      pushStringArg(args, "--score-threshold", stringValue("scoreThreshold"));
+      pushBoundedIntegerArg(args, "--count", "count", "Job count", values, 1, 100);
+      pushBoundedIntegerArg(args, "--score-threshold", "scoreThreshold", "Score threshold", values, 0, 100);
 
       if (booleanValue("disableAiEvaluation")) {
         args.push("--disable-ai-evaluation");
@@ -546,7 +599,7 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
       }
       args.push(url);
       pushStringArg(args, "--resume", stringValue("resumePath"));
-      if (booleanValue("dryRun")) {
+      if (values.dryRun !== false) {
         args.push("--dry-run");
       }
       return args;
@@ -558,7 +611,7 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
       }
       args.push(url);
       pushStringArg(args, "--resume", stringValue("resumePath"));
-      if (booleanValue("dryRun")) {
+      if (values.dryRun !== false) {
         args.push("--dry-run");
       }
       return args;
@@ -570,12 +623,8 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
       }
       args.push(url);
 
-      const count = stringValue("count");
-      if (count !== undefined && count !== "") {
-        args.push("--count", String(count));
-      }
-
-      pushStringArg(args, "--score-threshold", stringValue("scoreThreshold"));
+      pushBoundedIntegerArg(args, "--count", "count", "Job count", values, 1, 100);
+      pushBoundedIntegerArg(args, "--score-threshold", "scoreThreshold", "Score threshold", values, 0, 100);
       pushStringArg(args, "--resume", stringValue("resumePath"));
 
       if (booleanValue("disableAiEvaluation")) {
@@ -584,7 +633,7 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
 
       pushScoringMode();
 
-      if (booleanValue("dryRun")) {
+      if (values.dryRun !== false) {
         args.push("--dry-run");
       }
 
@@ -597,12 +646,8 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
       }
       args.push(url);
 
-      const count = stringValue("count");
-      if (count !== undefined && count !== "") {
-        args.push("--count", String(count));
-      }
-
-      pushStringArg(args, "--score-threshold", stringValue("scoreThreshold"));
+      pushBoundedIntegerArg(args, "--count", "count", "Job count", values, 1, 100);
+      pushBoundedIntegerArg(args, "--score-threshold", "scoreThreshold", "Score threshold", values, 0, 100);
       pushStringArg(args, "--resume", stringValue("resumePath"));
 
       if (booleanValue("disableAiEvaluation")) {
@@ -611,7 +656,7 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
 
       pushScoringMode();
 
-      if (booleanValue("dryRun")) {
+      if (values.dryRun !== false) {
         args.push("--dry-run");
       }
 
@@ -624,7 +669,7 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
       }
       args.push(url);
       pushStringArg(args, "--resume", stringValue("resumePath"));
-      if (booleanValue("dryRun")) {
+      if (values.dryRun !== false) {
         args.push("--dry-run");
       }
 

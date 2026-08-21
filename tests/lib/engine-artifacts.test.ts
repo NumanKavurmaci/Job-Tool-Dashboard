@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  MAX_ARTIFACT_JSON_BYTES,
   buildArtifactId,
   readArtifactById,
   readArtifactPreview,
@@ -513,5 +514,65 @@ describe("engine artifacts", () => {
   it("returns null for unknown artifact ids", () => {
     expect(readArtifactById("not-a-real-id")).toBeNull();
     expect(readArtifactById(buildArtifactId("unknown", "report.json"))).toBeNull();
+  });
+
+  it("rejects traversal attempts outside the selected artifact category", () => {
+    const authDir = path.join(tempRoot, ".auth");
+    fs.mkdirSync(authDir, { recursive: true });
+    fs.writeFileSync(path.join(authDir, "linkedin-session.json"), JSON.stringify({ cookie: "secret-cookie" }));
+
+    expect(
+      readArtifactById(buildArtifactId("batch-runs", "../../.auth/linkedin-session.json")),
+    ).toBeNull();
+    expect(
+      readArtifactById(buildArtifactId("batch-runs", "..\\..\\.auth\\linkedin-session.json")),
+    ).toBeNull();
+  });
+
+  it("redacts credential-like values from JSON previews", () => {
+    const reportPath = path.join(tempRoot, "artifacts", "batch-runs", "sensitive.json");
+    fs.writeFileSync(
+      reportPath,
+      JSON.stringify({
+        status: "completed",
+        accessToken: "top-secret-token",
+        nested: { cookie: "li-at-secret", safe: "visible" },
+      }),
+    );
+
+    const artifact = readArtifactById(buildArtifactId("batch-runs", "sensitive.json"));
+
+    expect(artifact?.preview).toContain("[REDACTED]");
+    expect(artifact?.preview).toContain("visible");
+    expect(artifact?.preview).not.toContain("top-secret-token");
+    expect(artifact?.preview).not.toContain("li-at-secret");
+  });
+
+  it("does not parse or preview oversized JSON artifacts", () => {
+    const reportPath = path.join(tempRoot, "artifacts", "batch-runs", "oversized.json");
+    fs.writeFileSync(reportPath, JSON.stringify({ payload: "x".repeat(MAX_ARTIFACT_JSON_BYTES) }));
+
+    const artifact = readArtifactById(buildArtifactId("batch-runs", "oversized.json"));
+
+    expect(artifact).not.toBeNull();
+    expect(artifact?.preview).toBeNull();
+    expect(artifact?.details).toBeNull();
+  });
+
+  it("rejects symlinked artifact files when the platform permits creating them", () => {
+    const externalPath = path.join(tempRoot, "outside.json");
+    const linkPath = path.join(tempRoot, "artifacts", "batch-runs", "linked.json");
+    fs.writeFileSync(externalPath, JSON.stringify({ token: "outside-secret" }));
+
+    try {
+      fs.symlinkSync(externalPath, linkPath, "file");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EPERM") {
+        return;
+      }
+      throw error;
+    }
+
+    expect(readArtifactById(buildArtifactId("batch-runs", "linked.json"))).toBeNull();
   });
 });

@@ -24,7 +24,7 @@ describe("engine status", () => {
     writeFileSync(path.join(tempDir, ".auth", "linkedin-session.json"), "{}");
     writeFileSync(
       path.join(tempDir, ".env"),
-      "LOCAL_LLM_BASE_URL=http://127.0.0.1:1234/v1\nLINKEDIN_SESSION_STATE_PATH=.auth/linkedin-session.json\n",
+      "LLM_PROVIDER=local\nLOCAL_LLM_BASE_URL=http://127.0.0.1:1234/v1\nLOCAL_LLM_MODEL=openai/gpt-oss-20b\nLINKEDIN_SESSION_STATE_PATH=.auth/linkedin-session.json\n",
     );
     global.fetch = vi.fn(async () => new Response("{}", { status: 200 })) as typeof fetch;
   });
@@ -46,9 +46,28 @@ describe("engine status", () => {
     expect(status.ready).toBe(true);
     expect(status.engineRoot).toBe(tempDir);
     expect(status.checks.map((check) => check.key)).toContain("database");
-    expect(status.checks.find((check) => check.key === "localLlm")).toMatchObject({
+    expect(status.llmProvider).toBe("local");
+    expect(status.checks.find((check) => check.key === "llm")).toMatchObject({
       ok: true,
       label: "LM Studio",
     });
+  });
+
+  it("accepts configured OpenAI without requiring LM Studio", async () => {
+    writeFileSync(
+      path.join(tempDir, ".env"),
+      "LLM_PROVIDER=openai\nOPENAI_API_KEY=test-key\nOPENAI_MODEL=gpt-4.1-mini\n",
+    );
+
+    const { readEngineConfigStatus } = await import("@/lib/engine-status");
+    const status = await readEngineConfigStatus();
+
+    expect(status.llmProvider).toBe("openai");
+    expect(status.localLlmBaseUrl).toBeNull();
+    expect(status.checks.find((check) => check.key === "llm")).toMatchObject({
+      ok: true,
+      label: "OpenAI",
+    });
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 });

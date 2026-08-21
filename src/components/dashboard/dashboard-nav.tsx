@@ -28,7 +28,7 @@ export function DashboardNav() {
               Job Tool Dashboard
             </p>
           </Link>
-          <p className="text-sm text-muted">Read-only visibility over the engine workspace.</p>
+          <p className="text-sm text-muted">Local visibility with guarded engine run control.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {primaryLinks.map((link) => (
