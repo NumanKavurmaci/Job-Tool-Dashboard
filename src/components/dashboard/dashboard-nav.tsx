@@ -8,6 +8,7 @@ const primaryLinks = [
   { href: "/search" as Route, label: "Search" },
   { href: "/recommendations" as Route, label: "Recommendations" },
   { href: "/applied" as Route, label: "Applied" },
+  { href: "/profile" as Route, label: "Profile" },
   { href: "/artifacts" as Route, label: "Artifacts" },
 ];
 
