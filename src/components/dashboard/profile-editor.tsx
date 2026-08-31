@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronUp,
   CircleDollarSign,
+  ExternalLink,
   FileJson,
   Link2,
   LoaderCircle,
@@ -22,11 +23,12 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { Card, SectionTitle } from "@/components/ui";
 import {
   CandidateProfileValidationError,
   normalizeCandidateProfile,
+  normalizeProfileComparisonKey,
   type CandidateProfileDocument,
   type DisclosurePreference,
   type RemotePreference,
@@ -76,6 +78,14 @@ const SECTION_LABELS: Record<string, string> = {
 
 const INPUT_CLASS = "w-full rounded-2xl border border-line bg-slate-950/75 px-4 py-3 text-sm text-text outline-none transition placeholder:text-slate-600 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20";
 const SELECT_CLASS = `${INPUT_CLASS} min-h-12`;
+const ValidationIssuesContext = createContext<string[]>([]);
+const TECH_SUGGESTIONS = ["TypeScript", "Node.js", "React", "Next.js", "PostgreSQL", "Docker", "Kubernetes", "Python", "AWS", "Azure", "Redis", "Prisma"];
+const BROAD_EXCLUSION_KEYS = new Set(["test", "java", "qa", "web", "software", "developer", "engineer", "data"]);
+
+function ValidationBoundary({ issues, children }: { issues: string[]; children: React.ReactNode }) {
+  if (issues.length === 0) return <>{children}</>;
+  return <ValidationIssuesContext.Provider value={issues}>{children}</ValidationIssuesContext.Provider>;
+}
 
 function profileCopy(profile: CandidateProfileDocument): CandidateProfileDocument {
   return JSON.parse(JSON.stringify(profile)) as CandidateProfileDocument;
@@ -98,20 +108,73 @@ function formatUpdatedAt(value: string | null): string {
   return new Intl.DateTimeFormat("tr-TR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
+function issuesForPath(issues: string[], path?: string): string[] {
+  if (!path) return [];
+  return issues.filter((issue) => issue === path || issue.startsWith(`${path}.`) || issue.startsWith(`${path}[`) || issue.startsWith(`${path} `));
+}
+
+function profileIssueMessage(issue: string): string {
+  if (issue.includes("must be a complete http(s) URL")) return "https:// ile başlayan tam bir web adresi gir.";
+  if (issue.includes("must not be negative")) return "Negatif bir değer kullanılamaz.";
+  if (issue.includes("conflicts with locations")) return "Aynı konum hem tercih edilen hem hariç tutulan listede olamaz.";
+  if (issue.includes("duplicates another technology")) return "Bu teknoloji başka bir yazım varyasyonuyla zaten kayıtlı.";
+  if (issue.includes("empty technology name")) return "Teknoloji adı boş bırakılamaz.";
+  if (issue.includes("must be a non-negative number")) return "Sıfır veya daha büyük bir sayı gir.";
+  if (issue.includes("must be a number between")) return "İzin verilen sayı aralığında bir değer gir.";
+  if (issue.includes("is required")) return "Bu alan zorunlu.";
+  if (issue.includes("must not be empty")) return "Boş bir değer eklenemez.";
+  return issue;
+}
+
+function sectionForIssue(issue: string): SectionId {
+  if (issue.startsWith("experience") || issue.startsWith("targeting")) return "targets";
+  if (issue.startsWith("locations")) return "locations";
+  if (issue.startsWith("authorization")) return "authorization";
+  if (issue.startsWith("personal")) return "personal";
+  if (issue.startsWith("compensation") || issue.startsWith("availability")) return "work";
+  if (issue.startsWith("identity") || issue.startsWith("references")) return "links";
+  return "advanced";
+}
+
+function isOpenableUrl(value: string | null): value is string {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return (url.protocol === "http:" || url.protocol === "https:") && Boolean(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function nextOverrideName(overrides: Record<string, number>): string {
+  let suffix = 1;
+  let candidate = "Yeni teknoloji";
+  const keys = new Set(Object.keys(overrides).map(normalizeProfileComparisonKey));
+  while (keys.has(normalizeProfileComparisonKey(candidate))) {
+    suffix += 1;
+    candidate = `Yeni teknoloji ${suffix}`;
+  }
+  return candidate;
+}
+
 function Field({
   label,
   help,
+  path,
   children,
 }: {
   label: string;
   help?: string;
+  path?: string;
   children: React.ReactNode;
 }) {
+  const issues = issuesForPath(useContext(ValidationIssuesContext), path);
   return (
-    <label className="space-y-2">
+    <label className="space-y-2" data-profile-path={path}>
       <span className="block text-sm font-medium text-text">{label}</span>
       {help ? <span className="block text-xs leading-5 text-muted">{help}</span> : null}
       {children}
+      {issues.map((issue) => <span key={issue} className="block text-xs leading-5 text-rose-200" role="alert">{profileIssueMessage(issue)}</span>)}
     </label>
   );
 }
@@ -142,29 +205,64 @@ function NullableBooleanSelect({
 function TagEditor({
   label,
   help,
+  path,
   values,
   onChange,
   placeholder,
   ordered = false,
+  suggestions = [],
+  tone = "neutral",
 }: {
   label: string;
   help?: string;
+  path: string;
   values: string[];
   onChange: (values: string[]) => void;
   placeholder: string;
   ordered?: boolean;
+  suggestions?: string[];
+  tone?: "neutral" | "success" | "warning" | "danger";
 }) {
   const [draft, setDraft] = useState("");
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const issues = issuesForPath(useContext(ValidationIssuesContext), path);
+  const toneClasses = {
+    neutral: "border-slate-500/30 bg-slate-400/10 text-slate-100",
+    success: "border-emerald-400/25 bg-emerald-400/10 text-emerald-100",
+    warning: "border-amber-400/25 bg-amber-400/10 text-amber-100",
+    danger: "border-rose-400/25 bg-rose-400/10 text-rose-100",
+  };
+
+  const visibleSuggestions = draft.trim()
+    ? suggestions.filter((suggestion) => normalizeProfileComparisonKey(suggestion).includes(normalizeProfileComparisonKey(draft)) && !values.some((value) => normalizeProfileComparisonKey(value) === normalizeProfileComparisonKey(suggestion))).slice(0, 6)
+    : [];
 
   function addValue() {
-    const nextValues = draft
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean)
-      .filter((value) => !values.some((existing) => existing.toLocaleLowerCase("tr") === value.toLocaleLowerCase("tr")));
-    if (nextValues.length === 0) return;
+    const existingKeys = new Set(values.map(normalizeProfileComparisonKey));
+    const nextValues: string[] = [];
+    let duplicateFound = false;
+    for (const value of draft.split(",").map((item) => item.trim()).filter(Boolean)) {
+      const key = normalizeProfileComparisonKey(value);
+      if (existingKeys.has(key)) {
+        duplicateFound = true;
+        continue;
+      }
+      existingKeys.add(key);
+      nextValues.push(value);
+    }
+    if (nextValues.length === 0) {
+      setDraftError(duplicateFound ? "Bu değer veya yazım varyasyonu zaten listede." : "Önce bir değer yaz.");
+      return;
+    }
     onChange([...values, ...nextValues]);
     setDraft("");
+    setDraftError(duplicateFound ? "Yinelenen değer eklenmedi." : null);
+  }
+
+  function addSuggestion(value: string) {
+    onChange([...values, value]);
+    setDraft("");
+    setDraftError(null);
   }
 
   function move(index: number, direction: -1 | 1) {
@@ -176,7 +274,7 @@ function TagEditor({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-profile-path={path}>
       <div>
         <p className="text-sm font-medium text-text">{label}</p>
         {help ? <p className="mt-1 text-xs leading-5 text-muted">{help}</p> : null}
@@ -196,7 +294,7 @@ function TagEditor({
                 </div>
               </div>
             ) : (
-              <span key={`${value}-${index}`} className="inline-flex min-h-10 items-center gap-1 rounded-full border border-slate-500/30 bg-slate-400/10 pl-3 text-sm text-slate-100">
+              <span key={`${value}-${index}`} className={`inline-flex min-h-10 items-center gap-1 rounded-full border pl-3 text-sm ${toneClasses[tone]}`}>
                 {value}
                 <button aria-label={`${value} değerini kaldır`} className="flex size-10 items-center justify-center rounded-full text-muted transition hover:bg-rose-400/10 hover:text-rose-200" type="button" onClick={() => onChange(values.filter((_, itemIndex) => itemIndex !== index))}><X className="size-4" /></button>
               </span>
@@ -213,7 +311,7 @@ function TagEditor({
           className={INPUT_CLASS}
           placeholder={placeholder}
           value={draft}
-          onChange={(event) => setDraft(event.target.value)}
+          onChange={(event) => { setDraft(event.target.value); setDraftError(null); }}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault();
@@ -225,6 +323,9 @@ function TagEditor({
           <Plus className="size-4" aria-hidden="true" /> Ekle
         </button>
       </div>
+      {visibleSuggestions.length > 0 ? <div className="flex flex-wrap gap-2" aria-label={`${label} önerileri`}>{visibleSuggestions.map((suggestion) => <button key={suggestion} className="min-h-10 rounded-full border border-blue-400/20 bg-blue-400/5 px-3 text-xs font-medium text-blue-100 transition hover:bg-blue-400/10" type="button" onClick={() => addSuggestion(suggestion)}>+ {suggestion}</button>)}</div> : null}
+      {draftError ? <p className="text-xs leading-5 text-amber-200" role="status">{draftError}</p> : null}
+      {issues.map((issue) => <p key={issue} className="text-xs leading-5 text-rose-200" role="alert">{profileIssueMessage(issue)}</p>)}
     </div>
   );
 }
@@ -360,8 +461,50 @@ export function ProfileEditor({
     }
   }
 
+  function focusFirstIssue(nextIssues: string[]) {
+    const firstIssue = nextIssues[0];
+    if (!firstIssue) return;
+    setActiveSection(sectionForIssue(firstIssue));
+    globalThis.setTimeout(() => {
+      if (typeof document === "undefined") return;
+      const container = [...document.querySelectorAll<HTMLElement>("[data-profile-path]")]
+        .find((element) => issuesForPath([firstIssue], element.dataset.profilePath).length > 0);
+      container?.querySelector<HTMLElement>("input, select, textarea, button")?.focus();
+    }, 0);
+  }
+
+  function renameOverride(technology: string, nextTechnology: string, years: number) {
+    if (!profile) return;
+    const duplicate = Object.keys(profile.experience.overrides).some((key) => key !== technology && normalizeProfileComparisonKey(key) === normalizeProfileComparisonKey(nextTechnology));
+    if (duplicate) {
+      const nextIssues = [`experience.overrides.${nextTechnology} duplicates another technology.`];
+      setIssues(nextIssues);
+      setSaveError("Aynı teknoloji ikinci kez eklenemez.");
+      return;
+    }
+    updateProfile((current) => {
+      const overrides = { ...current.experience.overrides };
+      delete overrides[technology];
+      overrides[nextTechnology] = years;
+      return { ...current, experience: { ...current.experience, overrides } };
+    });
+  }
+
   async function saveProfile() {
     if (!profile || !snapshot || !isDirty) return;
+    let validatedProfile: CandidateProfileDocument;
+    try {
+      validatedProfile = normalizeCandidateProfile(profile);
+    } catch (error) {
+      if (error instanceof CandidateProfileValidationError) {
+        setIssues(error.issues);
+        setSaveError("Lütfen işaretli alanları düzelt.");
+        focusFirstIssue(error.issues);
+        return;
+      }
+      setSaveError(error instanceof Error ? error.message : "Profil doğrulanamadı.");
+      return;
+    }
     setIsSaving(true);
     setSaveError(null);
     setIssues([]);
@@ -370,11 +513,13 @@ export function ProfileEditor({
       const response = await fetch("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profile, expectedRevision: snapshot.revision }),
+        body: JSON.stringify({ profile: validatedProfile, expectedRevision: snapshot.revision }),
       });
       const payload = await response.json() as Partial<ProfileSnapshot> & { error?: string; issues?: string[]; code?: string };
       if (!response.ok || !payload.profile || !payload.revision) {
-        setIssues(payload.issues ?? []);
+        const nextIssues = payload.issues ?? [];
+        setIssues(nextIssues);
+        focusFirstIssue(nextIssues);
         throw new Error(payload.error || (payload.code === "PROFILE_CHANGED" ? "Profil başka bir işlem tarafından değiştirildi." : "Profil kaydedilemedi."));
       }
       const nextSnapshot = payload as ProfileSnapshot;
@@ -419,8 +564,19 @@ export function ProfileEditor({
   }
 
   const sourceLabel = snapshot.source === "profile" ? "Aktif profile.json" : snapshot.source === "example" ? "Örnek profil yüklendi" : "Boş profil";
+  const broadExclusionTerms = profile.targeting.disallowedRoleKeywords.filter((value) => BROAD_EXCLUSION_KEYS.has(normalizeProfileComparisonKey(value)));
+  const uniqueHybridCityCount = new Set(profile.locations.allowedHybrid.map(normalizeProfileComparisonKey)).size;
+  const excludedLocationKeys = new Set(profile.locations.excluded.map(normalizeProfileComparisonKey));
+  const conflictingLocationNames = profile.locations.preferred.filter((value) => excludedLocationKeys.has(normalizeProfileComparisonKey(value)));
+  const regionalSponsorshipValues = Object.values(profile.authorization.regional);
+  const authorizationWarning = profile.authorization.workAuthorizationStatus === "authorized" && regionalSponsorshipValues.some((value) => value === true)
+    ? "Genel durum ‘çalışma iznim var’ iken en az bir bölgede sponsorluk gerekiyor. Bölgesel istisna doğruysa kayıtlı bırakabilirsin."
+    : profile.authorization.workAuthorizationStatus === "requires-sponsorship" && regionalSponsorshipValues.length > 0 && regionalSponsorshipValues.every((value) => value === false)
+      ? "Genel durum ‘sponsorluk gerekiyor’ iken tüm bölgeler ‘hayır’. Değerlerin birlikte doğru olduğundan emin ol."
+      : null;
 
   return (
+    <ValidationBoundary issues={issues}>
     <div className="space-y-5">
       <Card className="overflow-hidden border-violet-400/20 bg-[radial-gradient(circle_at_top_right,rgba(139,92,246,0.16),transparent_35%),linear-gradient(135deg,rgba(17,24,39,0.98),rgba(15,23,42,0.9))]">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
@@ -488,35 +644,41 @@ export function ProfileEditor({
             <div id="profile-panel-targets" role="tabpanel" aria-labelledby="profile-tab-targets" className="space-y-5">
               <SectionCard eyebrow="Temel profil" title="Deneyim ve hedef roller" subtitle="Gerçek deneyim yılını gir; hedef rollerini önem sırasına göre düzenle.">
                 <div className="grid gap-5 md:grid-cols-2">
-                  <Field label="Toplam deneyim yılı" help="Sıfır veya daha büyük bir sayı."><input className={INPUT_CLASS} min="0" step="0.5" type="number" value={profile.experience.years} onChange={(event) => updateProfile((current) => ({ ...current, experience: { ...current.experience, years: Number(event.target.value) } }))} /></Field>
+                  <Field label="Toplam deneyim yılı" help="Sıfır veya daha büyük; yarım yıl gibi ondalıklı değerler kullanılabilir." path="experience.years"><div className="relative"><input aria-label="Toplam deneyim yılı" className={`${INPUT_CLASS} pr-14`} min="0" step="0.5" type="number" value={profile.experience.years} onChange={(event) => updateProfile((current) => ({ ...current, experience: { ...current.experience, years: Number(event.target.value) } }))} /><span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-xs font-medium text-muted">yıl</span></div></Field>
                   <div className="rounded-2xl border border-blue-400/15 bg-blue-400/5 p-4"><p className="text-sm font-medium text-blue-100">Rol sırası önemlidir</p><p className="mt-1 text-xs leading-5 text-muted">İlk rol birincil hedef olarak değerlendirilir. Oklarla sıralamayı değiştirebilirsin.</p></div>
                 </div>
-                <TagEditor ordered label="Tercih edilen roller" help="İlk sıradaki rol en güçlü eşleştirme sinyalidir." placeholder="Örn. Platform Engineer" values={profile.targeting.preferredRoles} onChange={(preferredRoles) => updateProfile((current) => ({ ...current, targeting: { ...current.targeting, preferredRoles } }))} />
+                <TagEditor ordered label="Tercih edilen roller" help="İlk sıradaki rol en güçlü eşleştirme sinyalidir." path="targeting.preferredRoles" placeholder="Örn. Platform Engineer" values={profile.targeting.preferredRoles} onChange={(preferredRoles) => updateProfile((current) => ({ ...current, targeting: { ...current.targeting, preferredRoles } }))} />
               </SectionCard>
 
               <SectionCard eyebrow="Teknoloji pusulası" title="Bildiğin ve öğrenmek istediğin teknolojiler" subtitle="Mevcut yetkinlikleri gelişim hedeflerinden ayrı tut.">
-                <TagEditor label="Tercih edilen teknoloji yığını" placeholder="Örn. Redis, NestJS" values={profile.targeting.preferredTechStack} onChange={(preferredTechStack) => updateProfile((current) => ({ ...current, targeting: { ...current.targeting, preferredTechStack } }))} />
+                <TagEditor label="Tercih edilen teknoloji yığını" path="targeting.preferredTechStack" placeholder="Ara veya virgülle birden fazla ekle" suggestions={TECH_SUGGESTIONS} values={profile.targeting.preferredTechStack} onChange={(preferredTechStack) => updateProfile((current) => ({ ...current, targeting: { ...current.targeting, preferredTechStack } }))} />
                 <div className="rounded-2xl border border-emerald-400/15 bg-emerald-400/5 p-4">
-                  <TagEditor label="Öğrenmek istediklerim" help="Bu alan gelişim hedeflerini ayrı bir liste olarak tutar." placeholder="Örn. Kubernetes" values={profile.targeting.aspirationalTechStack} onChange={(aspirationalTechStack) => updateProfile((current) => ({ ...current, targeting: { ...current.targeting, aspirationalTechStack } }))} />
+                  <TagEditor label="Öğrenmek istediklerim" help="Bu alan gelişim hedeflerini ayrı bir liste olarak tutar." path="targeting.aspirationalTechStack" placeholder="Ara veya virgülle birden fazla ekle" suggestions={TECH_SUGGESTIONS} tone="success" values={profile.targeting.aspirationalTechStack} onChange={(aspirationalTechStack) => updateProfile((current) => ({ ...current, targeting: { ...current.targeting, aspirationalTechStack } }))} />
                 </div>
               </SectionCard>
 
               <SectionCard eyebrow="Eşleştirme kuralları" title="Rol sinyalleri ve eleme listeleri" subtitle="İlan metnindeki destekleyici veya engelleyici kelimeleri yönet.">
-                <TagEditor label="Rol örtüşme sinyalleri" placeholder="Örn. API, microservices" values={profile.targeting.preferredRoleOverlapSignals} onChange={(preferredRoleOverlapSignals) => updateProfile((current) => ({ ...current, targeting: { ...current.targeting, preferredRoleOverlapSignals } }))} />
-                <TagEditor label="Hariç tutulan roller" placeholder="Örn. Staff, Principal" values={profile.targeting.excludedRoles} onChange={(excludedRoles) => updateProfile((current) => ({ ...current, targeting: { ...current.targeting, excludedRoles } }))} />
-                <TagEditor label="İzin verilmeyen rol anahtarları" placeholder="Örn. SAP, Android" values={profile.targeting.disallowedRoleKeywords} onChange={(disallowedRoleKeywords) => updateProfile((current) => ({ ...current, targeting: { ...current.targeting, disallowedRoleKeywords } }))} />
+                <details className="group rounded-2xl border border-line bg-black/15 p-4">
+                  <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-text outline-none focus-visible:ring-2 focus-visible:ring-blue-400">Gelişmiş eşleştirme sinyalleri <ChevronDown className="size-4 text-muted transition group-open:rotate-180" aria-hidden="true" /></summary>
+                  <div className="mt-4"><TagEditor label="Rol örtüşme sinyalleri" path="targeting.preferredRoleOverlapSignals" placeholder="Örn. API, microservices" values={profile.targeting.preferredRoleOverlapSignals} onChange={(preferredRoleOverlapSignals) => updateProfile((current) => ({ ...current, targeting: { ...current.targeting, preferredRoleOverlapSignals } }))} /></div>
+                </details>
+                <TagEditor label="Hariç tutulan roller" path="targeting.excludedRoles" placeholder="Örn. Staff, Principal" tone="warning" values={profile.targeting.excludedRoles} onChange={(excludedRoles) => updateProfile((current) => ({ ...current, targeting: { ...current.targeting, excludedRoles } }))} />
+                <TagEditor label="İzin verilmeyen rol anahtarları" path="targeting.disallowedRoleKeywords" placeholder="Örn. SAP, Android" tone="danger" values={profile.targeting.disallowedRoleKeywords} onChange={(disallowedRoleKeywords) => updateProfile((current) => ({ ...current, targeting: { ...current.targeting, disallowedRoleKeywords } }))} />
+                {broadExclusionTerms.length > 0 ? <div className="flex items-start gap-3 rounded-2xl border border-amber-400/25 bg-amber-400/10 p-4 text-amber-100"><AlertTriangle className="mt-0.5 size-5 shrink-0" aria-hidden="true" /><div><p className="text-sm font-semibold">Geniş eşleşen eleme terimleri</p><p className="mt-1 text-xs leading-5">{broadExclusionTerms.join(", ")} kısa veya genel terimlerdir; uygun ilanları da eleyebilir. Kaydetmeden önce ilan metninde nasıl geçebileceklerini kontrol et.</p></div></div> : null}
+                <p className="rounded-2xl border border-line bg-black/15 p-4 text-xs leading-5 text-muted">Özet: {profile.targeting.excludedRoles.length} rol ve {profile.targeting.disallowedRoleKeywords.length} anahtar kelime eleme kuralı olarak kayıtlı.</p>
               </SectionCard>
 
               <SectionCard eyebrow="İnce ayar" title="Teknoloji deneyimi düzeltmeleri" subtitle="Belirli bir teknoloji için toplam deneyimden farklı bir yıl değeri kullan.">
                 <div className="grid gap-3">
                   {Object.entries(profile.experience.overrides).map(([technology, years]) => (
-                    <div key={technology} className="grid gap-3 rounded-2xl border border-line bg-black/20 p-3 sm:grid-cols-[minmax(0,1fr)_130px_44px] sm:items-center">
-                      <input aria-label="Teknoloji" className={INPUT_CLASS} value={technology} onChange={(event) => updateProfile((current) => { const overrides = { ...current.experience.overrides }; delete overrides[technology]; overrides[event.target.value] = years; return { ...current, experience: { ...current.experience, overrides } }; })} />
-                      <input aria-label={`${technology} deneyim yılı`} className={INPUT_CLASS} min="0" step="0.5" type="number" value={years} onChange={(event) => updateProfile((current) => ({ ...current, experience: { ...current.experience, overrides: { ...current.experience.overrides, [technology]: Number(event.target.value) } } }))} />
+                    <div key={technology} className="grid gap-3 rounded-2xl border border-line bg-black/20 p-3 sm:grid-cols-[minmax(0,1fr)_150px_44px] sm:items-center" data-profile-path="experience.overrides">
+                      <input aria-label="Teknoloji" className={INPUT_CLASS} value={technology} onChange={(event) => renameOverride(technology, event.target.value, years)} />
+                      <div className="relative"><input aria-label={`${technology} deneyim yılı`} className={`${INPUT_CLASS} pr-12`} min="0" step="0.5" type="number" value={years} onChange={(event) => updateProfile((current) => ({ ...current, experience: { ...current.experience, overrides: { ...current.experience.overrides, [technology]: Number(event.target.value) } } }))} /><span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted">yıl</span></div>
                       <button aria-label={`${technology} düzeltmesini kaldır`} className="flex size-11 items-center justify-center rounded-xl border border-line text-muted hover:border-rose-400/30 hover:text-rose-200" type="button" onClick={() => updateProfile((current) => { const overrides = { ...current.experience.overrides }; delete overrides[technology]; return { ...current, experience: { ...current.experience, overrides } }; })}><X className="size-4" /></button>
                     </div>
                   ))}
-                  <button className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-dashed border-line text-sm font-semibold text-muted transition hover:border-blue-400/40 hover:text-blue-200" type="button" onClick={() => updateProfile((current) => ({ ...current, experience: { ...current.experience, overrides: { ...current.experience.overrides, "Yeni teknoloji": 0 } } }))}><Plus className="size-4" aria-hidden="true" /> Teknoloji deneyimi ekle</button>
+                  {issuesForPath(issues, "experience.overrides").map((issue) => <p key={issue} className="text-xs leading-5 text-rose-200" role="alert">{profileIssueMessage(issue)}</p>)}
+                  <button className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-dashed border-line text-sm font-semibold text-muted transition hover:border-blue-400/40 hover:text-blue-200" type="button" onClick={() => updateProfile((current) => { const technology = nextOverrideName(current.experience.overrides); return { ...current, experience: { ...current.experience, overrides: { ...current.experience.overrides, [technology]: 0 } } }; })}><Plus className="size-4" aria-hidden="true" /> Teknoloji deneyimi ekle</button>
                 </div>
               </SectionCard>
             </div>
@@ -525,7 +687,7 @@ export function ProfileEditor({
           {activeSection === "locations" ? (
             <div id="profile-panel-locations" role="tabpanel" aria-labelledby="profile-tab-locations" className="space-y-5">
               <SectionCard eyebrow="Çalışma modeli" title="Nerede ve nasıl çalışmak istiyorsun?" subtitle="Tek bir ana çalışma modeli seç; sadece uzaktan filtresini ayrıca yönet.">
-                <fieldset className="space-y-3">
+                <fieldset className="space-y-3" data-profile-path="locations.remotePreference">
                   <legend className="text-sm font-medium text-text">Çalışma modeli</legend>
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     {([
@@ -538,7 +700,7 @@ export function ProfileEditor({
                     ))}
                   </div>
                 </fieldset>
-                <label className="flex min-h-16 cursor-pointer items-center justify-between gap-4 rounded-2xl border border-line bg-black/20 p-4 focus-within:ring-2 focus-within:ring-blue-400">
+                <label className="flex min-h-16 cursor-pointer items-center justify-between gap-4 rounded-2xl border border-line bg-black/20 p-4 focus-within:ring-2 focus-within:ring-blue-400" data-profile-path="locations.remoteOnly">
                   <span><span className="block text-sm font-medium text-text">Yalnızca uzaktan ilanlar</span><span className="mt-1 block text-xs leading-5 text-muted">Açık olduğunda uzaktan olmayan ilanlar filtrelenir.</span></span>
                   <input checked={profile.locations.remoteOnly} className="size-5 accent-blue-400" type="checkbox" onChange={(event) => updateProfile((current) => ({ ...current, locations: { ...current.locations, remoteOnly: event.target.checked } }))} />
                 </label>
@@ -546,10 +708,11 @@ export function ProfileEditor({
               </SectionCard>
 
               <SectionCard eyebrow="Bölgeler" title="Tercih edilen ve hariç tutulan konumlar" subtitle="Yazım varyasyonlarını tek tek girmek yerine kullanıcıya göstermek istediğin gerçek konumları ekle.">
-                <TagEditor label="Tercih edilen konumlar" placeholder="Örn. Remote, Europe" values={profile.locations.preferred} onChange={(preferred) => updateProfile((current) => ({ ...current, locations: { ...current.locations, preferred } }))} />
-                <TagEditor label="Hariç tutulan konumlar" placeholder="Örn. Istanbul onsite" values={profile.locations.excluded} onChange={(excluded) => updateProfile((current) => ({ ...current, locations: { ...current.locations, excluded } }))} />
-                <TagEditor label="Hibrit çalışılabilecek şehirler" placeholder="Örn. Ankara" values={profile.locations.allowedHybrid} onChange={(allowedHybrid) => updateProfile((current) => ({ ...current, locations: { ...current.locations, allowedHybrid } }))} />
-                <TagEditor label="Çalışma modeli kuralını atlayan konumlar" help="Bu liste gelişmiş eşleştirme davranışında kullanılır." placeholder="Örn. Europe" values={profile.locations.workplacePolicyBypass} onChange={(workplacePolicyBypass) => updateProfile((current) => ({ ...current, locations: { ...current.locations, workplacePolicyBypass } }))} />
+                <TagEditor label="Tercih edilen konumlar" path="locations.preferred" placeholder="Örn. Remote, Europe" tone="success" values={profile.locations.preferred} onChange={(preferred) => updateProfile((current) => ({ ...current, locations: { ...current.locations, preferred } }))} />
+                <TagEditor label="Hariç tutulan konumlar" path="locations.excluded" placeholder="Örn. Istanbul onsite" tone="danger" values={profile.locations.excluded} onChange={(excluded) => updateProfile((current) => ({ ...current, locations: { ...current.locations, excluded } }))} />
+                {conflictingLocationNames.length > 0 ? <div className="flex items-start gap-3 rounded-2xl border border-rose-400/25 bg-rose-400/10 p-4 text-rose-100" role="alert"><AlertTriangle className="mt-0.5 size-5 shrink-0" aria-hidden="true" /><p className="text-xs leading-5">{conflictingLocationNames.join(", ")} hem tercih edilen hem hariç tutulan listede. Kaydetmek için konumu listelerden birinden kaldır.</p></div> : null}
+                <TagEditor label={`Hibrit çalışılabilecek şehirler · ${uniqueHybridCityCount} benzersiz şehir`} help="İzmir / Izmir gibi yazım varyasyonları aynı şehir kabul edilir." path="locations.allowedHybrid" placeholder="Örn. Ankara" values={profile.locations.allowedHybrid} onChange={(allowedHybrid) => updateProfile((current) => ({ ...current, locations: { ...current.locations, allowedHybrid } }))} />
+                <TagEditor label="Çalışma modeli kuralını atlayan konumlar" help="Bu liste gelişmiş eşleştirme davranışında kullanılır." path="locations.workplacePolicyBypass" placeholder="Örn. Europe" values={profile.locations.workplacePolicyBypass} onChange={(workplacePolicyBypass) => updateProfile((current) => ({ ...current, locations: { ...current.locations, workplacePolicyBypass } }))} />
               </SectionCard>
             </div>
           ) : null}
@@ -559,9 +722,10 @@ export function ProfileEditor({
               <SectionCard eyebrow="Başvuru cevapları" title="Vize ve çalışma izni" subtitle="Bu değerler çalışma izni ve sponsorluk sorularına yanıt üretirken kullanılabilir.">
                 <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-sm leading-6 text-amber-100"><strong className="font-semibold">Kontrol et:</strong> Buradaki bilgilerin doğru ve güncel olduğundan emin ol. Arayüz, backend davranışına ek bir onay veya paylaşım kuralı getirmez.</div>
                 <div className="grid gap-5 md:grid-cols-2">
-                  <Field label="Vize gereksinimi"><select className={SELECT_CLASS} value={profile.authorization.visaRequirement} onChange={(event) => updateProfile((current) => ({ ...current, authorization: { ...current.authorization, visaRequirement: event.target.value as VisaRequirement } }))}><option value="unknown">Bilinmiyor</option><option value="not-required">Gerekmiyor</option><option value="required">Gerekiyor</option></select></Field>
-                  <Field label="Çalışma izni durumu"><select className={SELECT_CLASS} value={profile.authorization.workAuthorizationStatus} onChange={(event) => updateProfile((current) => ({ ...current, authorization: { ...current.authorization, workAuthorizationStatus: event.target.value as WorkAuthorizationStatus } }))}><option value="unknown">Bilinmiyor</option><option value="authorized">Çalışma iznim var</option><option value="requires-sponsorship">Sponsorluk gerekiyor</option></select></Field>
+                  <Field label="Vize gereksinimi" path="authorization.visaRequirement"><select className={SELECT_CLASS} value={profile.authorization.visaRequirement} onChange={(event) => updateProfile((current) => ({ ...current, authorization: { ...current.authorization, visaRequirement: event.target.value as VisaRequirement } }))}><option value="unknown">Bilinmiyor</option><option value="not-required">Gerekmiyor</option><option value="required">Gerekiyor</option></select></Field>
+                  <Field label="Çalışma izni durumu" path="authorization.workAuthorizationStatus"><select className={SELECT_CLASS} value={profile.authorization.workAuthorizationStatus} onChange={(event) => updateProfile((current) => ({ ...current, authorization: { ...current.authorization, workAuthorizationStatus: event.target.value as WorkAuthorizationStatus } }))}><option value="unknown">Bilinmiyor</option><option value="authorized">Çalışma iznim var</option><option value="requires-sponsorship">Sponsorluk gerekiyor</option></select></Field>
                 </div>
+                {authorizationWarning ? <div className="flex items-start gap-3 rounded-2xl border border-amber-400/25 bg-amber-400/10 p-4 text-amber-100"><AlertTriangle className="mt-0.5 size-5 shrink-0" aria-hidden="true" /><p className="text-xs leading-5">{authorizationWarning}</p></div> : null}
               </SectionCard>
 
               <SectionCard eyebrow="Bölgesel ayarlar" title="Sponsorluk gereksinimi" subtitle="Her bölge için evet, hayır veya belirtilmedi seçeneğini kullan.">
@@ -569,9 +733,10 @@ export function ProfileEditor({
                   {([
                     ["turkeyRequiresSponsorship", "Türkiye"], ["europeRequiresSponsorship", "Avrupa"], ["defaultRequiresSponsorship", "Diğer bölgeler / varsayılan"],
                   ] as const).map(([key, label]) => (
-                    <div key={key} className="grid gap-3 rounded-2xl border border-line bg-black/20 p-4 sm:grid-cols-[minmax(0,1fr)_260px] sm:items-center">
+                    <div key={key} className="grid gap-3 rounded-2xl border border-line bg-black/20 p-4 sm:grid-cols-[minmax(0,1fr)_260px] sm:items-center" data-profile-path={`authorization.regional.${key}`}>
                       <div><p className="text-sm font-medium text-text">{label}</p><p className="mt-1 text-xs text-muted">Sponsorluk gerekiyor mu?</p></div>
                       <NullableBooleanSelect ariaLabel={`${label} sponsorluk gereksinimi`} value={profile.authorization.regional[key]} onChange={(value) => updateProfile((current) => ({ ...current, authorization: { ...current.authorization, regional: { ...current.authorization.regional, [key]: value } } }))} />
+                      {issuesForPath(issues, `authorization.regional.${key}`).map((issue) => <p key={issue} className="text-xs text-rose-200 sm:col-span-2" role="alert">{profileIssueMessage(issue)}</p>)}
                     </div>
                   ))}
                 </div>
@@ -582,8 +747,8 @@ export function ProfileEditor({
           {activeSection === "personal" ? (
             <div id="profile-panel-personal" role="tabpanel" aria-labelledby="profile-tab-personal" className="space-y-5">
               <SectionCard eyebrow="Kişisel profil" title="Dil ve eğitim bilgileri" subtitle="Başvuru sorularında kullanılabilecek temel bilgiler.">
-                <TagEditor label="Diller" placeholder="Örn. Turkish, English" values={profile.personal.languages} onChange={(languages) => updateProfile((current) => ({ ...current, personal: { ...current.personal, languages } }))} />
-                <div className="max-w-sm"><Field label="Not ortalaması" help="0–4 aralığında; boş bırakılabilir."><input className={INPUT_CLASS} max="4" min="0" step="0.01" type="number" value={profile.personal.gpa ?? ""} onChange={(event) => updateProfile((current) => ({ ...current, personal: { ...current.personal, gpa: event.target.value === "" ? null : Number(event.target.value) } }))} /></Field></div>
+                <TagEditor label="Diller" path="personal.languages" placeholder="Örn. Turkish, English" values={profile.personal.languages} onChange={(languages) => updateProfile((current) => ({ ...current, personal: { ...current.personal, languages } }))} />
+                <div className="max-w-sm"><Field label="Not ortalaması" help="0–4 aralığında; boş bırakılabilir." path="personal.gpa"><input className={INPUT_CLASS} max="4" min="0" step="0.01" type="number" value={profile.personal.gpa ?? ""} onChange={(event) => updateProfile((current) => ({ ...current, personal: { ...current.personal, gpa: event.target.value === "" ? null : Number(event.target.value) } }))} /></Field></div>
               </SectionCard>
 
               <SectionCard eyebrow="Hassas alanlar" title="Demografik bilgiler" subtitle="Bu değerler backend tarafından başvuru cevapları oluşturulurken kullanılabilir.">
@@ -592,31 +757,31 @@ export function ProfileEditor({
                   {([
                     ["gender", "Cinsiyet"], ["pronouns", "Hitap / zamir"], ["ethnicity", "Etnik köken"], ["race", "Irk"], ["veteranStatus", "Veteran durumu"], ["sexualOrientation", "Cinsel yönelim"],
                   ] as const).map(([key, label]) => (
-                    <Field key={key} label={label} help="Boş bırakılabilir."><input className={INPUT_CLASS} value={profile.personal.demographics[key] ?? ""} onChange={(event) => updateProfile((current) => ({ ...current, personal: { ...current.personal, demographics: { ...current.personal.demographics, [key]: nullableText(event.target.value) } } }))} /></Field>
+                    <Field key={key} label={label} help="Boş bırakılabilir." path={`personal.demographics.${key}`}><input className={INPUT_CLASS} value={profile.personal.demographics[key] ?? ""} onChange={(event) => updateProfile((current) => ({ ...current, personal: { ...current.personal, demographics: { ...current.personal.demographics, [key]: nullableText(event.target.value) } } }))} /></Field>
                   ))}
                 </div>
               </SectionCard>
 
               <SectionCard eyebrow="Sağlık ve düzenleme" title="Engellilik bilgileri" subtitle="Engel türlerini, oranları ve düzenleme ihtiyacını dosyadaki yapısıyla düzenle.">
-                <label className="flex min-h-16 cursor-pointer items-center justify-between gap-4 rounded-2xl border border-line bg-black/20 p-4 focus-within:ring-2 focus-within:ring-blue-400"><span><span className="block text-sm font-medium text-text">Engellilik bilgisi var</span><span className="mt-1 block text-xs text-muted">Kapatıldığında listedeki engel kayıtları kaldırılır; kaydetmeden önce geri alabilirsin.</span></span><input checked={profile.personal.disability.hasDisability} className="size-5 accent-blue-400" type="checkbox" onChange={(event) => updateProfile((current) => ({ ...current, personal: { ...current.personal, disability: { ...current.personal.disability, hasDisability: event.target.checked, disabilities: event.target.checked ? current.personal.disability.disabilities : [] } } }))} /></label>
+                <label className="flex min-h-16 cursor-pointer items-center justify-between gap-4 rounded-2xl border border-line bg-black/20 p-4 focus-within:ring-2 focus-within:ring-blue-400" data-profile-path="personal.disability.hasDisability"><span><span className="block text-sm font-medium text-text">Engellilik bilgisi var</span><span className="mt-1 block text-xs text-muted">Kapatıldığında listedeki engel kayıtları kaldırılır; kaydetmeden önce geri alabilirsin.</span></span><input checked={profile.personal.disability.hasDisability} className="size-5 accent-blue-400" type="checkbox" onChange={(event) => updateProfile((current) => ({ ...current, personal: { ...current.personal, disability: { ...current.personal.disability, hasDisability: event.target.checked, disabilities: event.target.checked ? current.personal.disability.disabilities : [] } } }))} /></label>
                 <div className="grid gap-3">
                   {profile.personal.disability.disabilities.map((disability, index) => (
                     <div key={index} className="rounded-2xl border border-line bg-black/20 p-4">
                       <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_150px_44px]">
-                        <Field label="Engel türü"><input className={INPUT_CLASS} value={disability.type} onChange={(event) => updateProfile((current) => ({ ...current, personal: { ...current.personal, disability: { ...current.personal.disability, disabilities: current.personal.disability.disabilities.map((item, itemIndex) => itemIndex === index ? { ...item, type: event.target.value } : item) } } }))} /></Field>
-                        <Field label="Oran (%)"><input className={INPUT_CLASS} max="100" min="0" type="number" value={disability.percentage ?? ""} onChange={(event) => updateProfile((current) => ({ ...current, personal: { ...current.personal, disability: { ...current.personal.disability, disabilities: current.personal.disability.disabilities.map((item, itemIndex) => itemIndex === index ? { ...item, percentage: event.target.value === "" ? null : Number(event.target.value) } : item) } } }))} /></Field>
+                        <Field label="Engel türü" path={`personal.disability.disabilities[${index}].type`}><input className={INPUT_CLASS} value={disability.type} onChange={(event) => updateProfile((current) => ({ ...current, personal: { ...current.personal, disability: { ...current.personal.disability, disabilities: current.personal.disability.disabilities.map((item, itemIndex) => itemIndex === index ? { ...item, type: event.target.value } : item) } } }))} /></Field>
+                        <Field label="Oran (%)" path={`personal.disability.disabilities[${index}].percentage`}><input className={INPUT_CLASS} max="100" min="0" type="number" value={disability.percentage ?? ""} onChange={(event) => updateProfile((current) => ({ ...current, personal: { ...current.personal, disability: { ...current.personal.disability, disabilities: current.personal.disability.disabilities.map((item, itemIndex) => itemIndex === index ? { ...item, percentage: event.target.value === "" ? null : Number(event.target.value) } : item) } } }))} /></Field>
                         <button aria-label={`${index + 1}. engel kaydını kaldır`} className="mt-auto flex size-11 items-center justify-center rounded-xl border border-line text-muted hover:border-rose-400/30 hover:text-rose-200" type="button" onClick={() => updateProfile((current) => ({ ...current, personal: { ...current.personal, disability: { ...current.personal.disability, disabilities: current.personal.disability.disabilities.filter((_, itemIndex) => itemIndex !== index) } } }))}><X className="size-4" /></button>
                       </div>
-                      <div className="mt-4"><Field label="Not"><input className={INPUT_CLASS} value={disability.notes ?? ""} onChange={(event) => updateProfile((current) => ({ ...current, personal: { ...current.personal, disability: { ...current.personal.disability, disabilities: current.personal.disability.disabilities.map((item, itemIndex) => itemIndex === index ? { ...item, notes: nullableText(event.target.value) } : item) } } }))} /></Field></div>
+                      <div className="mt-4"><Field label="Not" path={`personal.disability.disabilities[${index}].notes`}><input className={INPUT_CLASS} value={disability.notes ?? ""} onChange={(event) => updateProfile((current) => ({ ...current, personal: { ...current.personal, disability: { ...current.personal.disability, disabilities: current.personal.disability.disabilities.map((item, itemIndex) => itemIndex === index ? { ...item, notes: nullableText(event.target.value) } : item) } } }))} /></Field></div>
                     </div>
                   ))}
                   <button className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-dashed border-line text-sm font-semibold text-muted transition hover:border-blue-400/40 hover:text-blue-200" type="button" onClick={() => updateProfile((current) => ({ ...current, personal: { ...current.personal, disability: { ...current.personal.disability, hasDisability: true, disabilities: [...current.personal.disability.disabilities, { type: "", percentage: null, notes: null }] } } }))}><Plus className="size-4" aria-hidden="true" /> Engel kaydı ekle</button>
                 </div>
                 <div className="grid gap-5 md:grid-cols-2">
-                  <Field label="Düzenleme gerekiyor mu?"><NullableBooleanSelect ariaLabel="Düzenleme gereksinimi" value={profile.personal.disability.requiresAccommodation} onChange={(requiresAccommodation) => updateProfile((current) => ({ ...current, personal: { ...current.personal, disability: { ...current.personal.disability, requiresAccommodation } } }))} /></Field>
-                  <Field label="Paylaşım tercihi"><select className={SELECT_CLASS} value={profile.personal.disability.disclosurePreference} onChange={(event) => updateProfile((current) => ({ ...current, personal: { ...current.personal, disability: { ...current.personal.disability, disclosurePreference: event.target.value as DisclosurePreference } } }))}><option value="manual-review">Manuel inceleme</option><option value="disclose">Paylaş</option><option value="prefer-not-to-say">Yanıtlamamayı tercih et</option></select></Field>
+                  <Field label="Düzenleme gerekiyor mu?" path="personal.disability.requiresAccommodation"><NullableBooleanSelect ariaLabel="Düzenleme gereksinimi" value={profile.personal.disability.requiresAccommodation} onChange={(requiresAccommodation) => updateProfile((current) => ({ ...current, personal: { ...current.personal, disability: { ...current.personal.disability, requiresAccommodation } } }))} /></Field>
+                  <Field label="Paylaşım tercihi" path="personal.disability.disclosurePreference"><select className={SELECT_CLASS} value={profile.personal.disability.disclosurePreference} onChange={(event) => updateProfile((current) => ({ ...current, personal: { ...current.personal, disability: { ...current.personal.disability, disclosurePreference: event.target.value as DisclosurePreference } } }))}><option value="manual-review">Manuel inceleme</option><option value="disclose">Paylaş</option><option value="prefer-not-to-say">Yanıtlamamayı tercih et</option></select></Field>
                 </div>
-                <Field label="Düzenleme notları"><input className={INPUT_CLASS} value={profile.personal.disability.accommodationNotes ?? ""} onChange={(event) => updateProfile((current) => ({ ...current, personal: { ...current.personal, disability: { ...current.personal.disability, accommodationNotes: nullableText(event.target.value) } } }))} /></Field>
+                <Field label="Düzenleme notları" path="personal.disability.accommodationNotes"><input className={INPUT_CLASS} value={profile.personal.disability.accommodationNotes ?? ""} onChange={(event) => updateProfile((current) => ({ ...current, personal: { ...current.personal, disability: { ...current.personal.disability, accommodationNotes: nullableText(event.target.value) } } }))} /></Field>
               </SectionCard>
             </div>
           ) : null}
@@ -625,16 +790,16 @@ export function ProfileEditor({
             <div id="profile-panel-work" role="tabpanel" aria-labelledby="profile-tab-work" className="space-y-5">
               <SectionCard eyebrow="Ücret beklentisi" title="Para birimine göre beklentiler" subtitle="Dosya yalnızca değerleri tutar; dönem veya brüt/net anlamı eklenmez.">
                 <div className="grid gap-4 md:grid-cols-3">
-                  {(["usd", "eur", "try"] as const).map((currency) => <Field key={currency} label={currency.toUpperCase()}><input className={INPUT_CLASS} inputMode="decimal" value={textValue(profile.compensation.expectations[currency])} onChange={(event) => updateProfile((current) => ({ ...current, compensation: { ...current.compensation, expectations: { ...current.compensation.expectations, [currency]: nullableScalar(event.target.value) } } }))} /></Field>)}
+                  {(["usd", "eur", "try"] as const).map((currency) => <Field key={currency} label={currency.toUpperCase()} path={`compensation.expectations.${currency}`}><input className={INPUT_CLASS} inputMode="decimal" value={textValue(profile.compensation.expectations[currency])} onChange={(event) => updateProfile((current) => ({ ...current, compensation: { ...current.compensation, expectations: { ...current.compensation.expectations, [currency]: nullableScalar(event.target.value) } } }))} /></Field>)}
                 </div>
-                <Field label="Ücret özeti" help="Serbest metin açıklaması."><textarea className={`${INPUT_CLASS} min-h-28 resize-y py-3`} value={profile.compensation.summary ?? ""} onChange={(event) => updateProfile((current) => ({ ...current, compensation: { ...current.compensation, summary: nullableText(event.target.value) } }))} /></Field>
+                <Field label="Ücret özeti" help="Serbest metin açıklaması; dönem ve brüt/net bilgisini gerekiyorsa burada açıkça yaz." path="compensation.summary"><textarea className={`${INPUT_CLASS} min-h-28 resize-y py-3`} value={profile.compensation.summary ?? ""} onChange={(event) => updateProfile((current) => ({ ...current, compensation: { ...current.compensation, summary: nullableText(event.target.value) } }))} /></Field>
               </SectionCard>
 
               <SectionCard eyebrow="Müsaitlik" title="Başlangıç bilgileri" subtitle="Hemen başlayabilme, ihbar süresi ve başlangıç tarihini birlikte yönet.">
                 <div className="grid gap-5 md:grid-cols-2">
-                  <Field label="Hemen başlayabilir mi?"><NullableBooleanSelect ariaLabel="Hemen başlayabilme" value={profile.availability.canStartImmediately} onChange={(canStartImmediately) => updateProfile((current) => ({ ...current, availability: { ...current.availability, canStartImmediately } }))} /></Field>
-                  <Field label="İhbar süresi"><input className={INPUT_CLASS} disabled={profile.availability.canStartImmediately === true} placeholder="Örn. 30 days" value={textValue(profile.availability.noticePeriod)} onChange={(event) => updateProfile((current) => ({ ...current, availability: { ...current.availability, noticePeriod: nullableScalar(event.target.value) } }))} /></Field>
-                  <Field label="Başlangıç tarihi" help="Serbest metin veya tarih değeri."><input className={INPUT_CLASS} disabled={profile.availability.canStartImmediately === true} placeholder="YYYY-MM-DD" value={textValue(profile.availability.startDate)} onChange={(event) => updateProfile((current) => ({ ...current, availability: { ...current.availability, startDate: nullableScalar(event.target.value) } }))} /></Field>
+                  <Field label="Hemen başlayabilir mi?" path="availability.canStartImmediately"><NullableBooleanSelect ariaLabel="Hemen başlayabilme" value={profile.availability.canStartImmediately} onChange={(canStartImmediately) => updateProfile((current) => ({ ...current, availability: { ...current.availability, canStartImmediately } }))} /></Field>
+                  <Field label="İhbar süresi" path="availability.noticePeriod"><input className={INPUT_CLASS} disabled={profile.availability.canStartImmediately === true} placeholder="Örn. 30 days" value={textValue(profile.availability.noticePeriod)} onChange={(event) => updateProfile((current) => ({ ...current, availability: { ...current.availability, noticePeriod: nullableScalar(event.target.value) } }))} /></Field>
+                  <Field label="Başlangıç tarihi" help="Serbest metin veya tarih değeri." path="availability.startDate"><input className={INPUT_CLASS} disabled={profile.availability.canStartImmediately === true} placeholder="YYYY-MM-DD" value={textValue(profile.availability.startDate)} onChange={(event) => updateProfile((current) => ({ ...current, availability: { ...current.availability, startDate: nullableScalar(event.target.value) } }))} /></Field>
                 </div>
                 {profile.availability.canStartImmediately === true && (profile.availability.noticePeriod != null || profile.availability.startDate != null) ? <p className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-xs leading-5 text-amber-100">Hemen başlayabilir seçili. Kayıtlı ihbar süresi ve başlangıç tarihi korunur ancak bu alanlar şu an devre dışıdır.</p> : null}
               </SectionCard>
@@ -645,7 +810,7 @@ export function ProfileEditor({
             <div id="profile-panel-links" role="tabpanel" aria-labelledby="profile-tab-links" className="space-y-5">
               <SectionCard eyebrow="Profesyonel kimlik" title="Profil bağlantıları" subtitle="URL’leri https:// dahil tam adres olarak gir.">
                 <div className="grid gap-5">
-                  {([ ["linkedinUrl", "LinkedIn"], ["githubUrl", "GitHub"], ["portfolioUrl", "Portfolyo"] ] as const).map(([key, label]) => <Field key={key} label={label}><input className={INPUT_CLASS} placeholder="https://…" type="url" value={profile.identity[key] ?? ""} onChange={(event) => updateProfile((current) => ({ ...current, identity: { ...current.identity, [key]: nullableText(event.target.value) } }))} /></Field>)}
+                  {([ ["linkedinUrl", "LinkedIn"], ["githubUrl", "GitHub"], ["portfolioUrl", "Portfolyo"] ] as const).map(([key, label]) => <div key={key}><Field label={label} path={`identity.${key}`}><input aria-label={`${label} URL`} className={INPUT_CLASS} placeholder="https://…" type="url" value={profile.identity[key] ?? ""} onChange={(event) => updateProfile((current) => ({ ...current, identity: { ...current.identity, [key]: nullableText(event.target.value) } }))} /></Field>{isOpenableUrl(profile.identity[key]) ? <a className="mt-2 inline-flex min-h-10 items-center gap-2 rounded-xl px-3 text-xs font-semibold text-blue-200 transition hover:bg-blue-400/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400" href={profile.identity[key] ?? undefined} rel="noreferrer" target="_blank"><ExternalLink className="size-4" aria-hidden="true" /> Aç</a> : null}</div>)}
                 </div>
               </SectionCard>
 
@@ -655,9 +820,9 @@ export function ProfileEditor({
                     <div key={index} className="rounded-2xl border border-line bg-black/20 p-4">
                       <div className="mb-4 flex items-center justify-between"><p className="text-sm font-semibold text-text">Referans {index + 1}</p><button aria-label={`${index + 1}. referansı kaldır`} className="flex size-11 items-center justify-center rounded-xl text-muted hover:bg-rose-400/10 hover:text-rose-200" type="button" onClick={() => updateProfile((current) => ({ ...current, references: current.references.filter((_, itemIndex) => itemIndex !== index) }))}><X className="size-4" /></button></div>
                       <div className="grid gap-4 md:grid-cols-2">
-                        <Field label="Ad"><input className={INPUT_CLASS} value={reference.name} onChange={(event) => updateProfile((current) => ({ ...current, references: current.references.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item) }))} /></Field>
-                        <Field label="İlişki"><input className={INPUT_CLASS} placeholder="Örn. Eski ekip lideri" value={reference.relationship ?? ""} onChange={(event) => updateProfile((current) => ({ ...current, references: current.references.map((item, itemIndex) => itemIndex === index ? { ...item, relationship: nullableText(event.target.value) } : item) }))} /></Field>
-                        <div className="md:col-span-2"><Field label="LinkedIn URL"><input className={INPUT_CLASS} placeholder="https://www.linkedin.com/in/…" type="url" value={reference.linkedinUrl} onChange={(event) => updateProfile((current) => ({ ...current, references: current.references.map((item, itemIndex) => itemIndex === index ? { ...item, linkedinUrl: event.target.value } : item) }))} /></Field></div>
+                        <Field label="Ad" path={`references[${index}].name`}><input className={INPUT_CLASS} value={reference.name} onChange={(event) => updateProfile((current) => ({ ...current, references: current.references.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item) }))} /></Field>
+                        <Field label="İlişki" path={`references[${index}].relationship`}><input className={INPUT_CLASS} placeholder="Örn. Eski ekip lideri" value={reference.relationship ?? ""} onChange={(event) => updateProfile((current) => ({ ...current, references: current.references.map((item, itemIndex) => itemIndex === index ? { ...item, relationship: nullableText(event.target.value) } : item) }))} /></Field>
+                        <div className="md:col-span-2"><Field label="LinkedIn URL" path={`references[${index}].linkedinUrl`}><input className={INPUT_CLASS} placeholder="https://www.linkedin.com/in/…" type="url" value={reference.linkedinUrl} onChange={(event) => updateProfile((current) => ({ ...current, references: current.references.map((item, itemIndex) => itemIndex === index ? { ...item, linkedinUrl: event.target.value } : item) }))} /></Field>{isOpenableUrl(reference.linkedinUrl) ? <a className="mt-2 inline-flex min-h-10 items-center gap-2 rounded-xl px-3 text-xs font-semibold text-blue-200 transition hover:bg-blue-400/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400" href={reference.linkedinUrl} rel="noreferrer" target="_blank"><ExternalLink className="size-4" aria-hidden="true" /> Aç</a> : null}</div>
                       </div>
                     </div>
                   ))}
@@ -682,7 +847,7 @@ export function ProfileEditor({
 
       {(saveError || issues.length > 0) ? (
         <div className="rounded-3xl border border-rose-400/25 bg-rose-400/10 p-5 text-rose-100" role="alert">
-          <div className="flex items-start gap-3"><AlertTriangle className="mt-0.5 size-5 shrink-0" aria-hidden="true" /><div><p className="font-semibold">Profil kaydedilemedi</p><p className="mt-1 text-sm leading-6">{saveError}</p>{issues.length > 0 ? <ul className="mt-3 list-disc space-y-1 pl-5 text-sm">{issues.map((issue) => <li key={issue}>{issue}</li>)}</ul> : null}</div></div>
+          <div className="flex items-start gap-3"><AlertTriangle className="mt-0.5 size-5 shrink-0" aria-hidden="true" /><div><p className="font-semibold">Profil kaydedilemedi</p><p className="mt-1 text-sm leading-6">{saveError}</p>{issues.length > 0 ? <ul className="mt-3 list-disc space-y-1 pl-5 text-sm">{issues.map((issue) => <li key={issue}>{profileIssueMessage(issue)}</li>)}</ul> : null}</div></div>
           <button className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-rose-300/20 px-4 text-sm font-semibold" type="button" onClick={() => void loadProfile()}><RefreshCw className="size-4" aria-hidden="true" /> Dosyayı yeniden yükle</button>
         </div>
       ) : null}
@@ -699,5 +864,6 @@ export function ProfileEditor({
         </div>
       </div>
     </div>
+    </ValidationBoundary>
   );
 }

@@ -3,7 +3,7 @@ import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { normalizeCandidateProfile } from "@/lib/candidate-profile-schema";
+import { normalizeCandidateProfile, type CandidateProfileDocument } from "@/lib/candidate-profile-schema";
 import { ProfileEditor, type ProfileSnapshot } from "@/src/components/dashboard/profile-editor";
 
 const profile = normalizeCandidateProfile({
@@ -191,6 +191,8 @@ describe("ProfileEditor", () => {
     const disabilityToggle = personalPanel.findAllByType("input").find((input) => input.props.type === "checkbox");
     await act(async () => disabilityToggle?.props.onChange({ target: { checked: false } }));
     await act(async () => buttonWithText(renderer, "Engel kaydı ekle").props.onClick());
+    const addedDisabilityType = personalPanel.findByProps({ "data-profile-path": "personal.disability.disabilities[0].type" }).findByType("input");
+    await act(async () => addedDisabilityType.props.onChange({ target: { value: "hearing" } }));
     const disclosure = personalPanel.findAllByType("select").at(-1);
     await act(async () => disclosure?.props.onChange({ target: { value: "prefer-not-to-say" } }));
 
@@ -206,13 +208,87 @@ describe("ProfileEditor", () => {
     const portfolio = linksPanel.findAllByType("input").find((input) => input.props.value === "https://example.com");
     await act(async () => portfolio?.props.onChange({ target: { value: "https://portfolio.example.com" } }));
     await act(async () => buttonWithText(renderer, "Referans ekle").props.onClick());
+    const addedReferenceName = linksPanel.findByProps({ "data-profile-path": "references[1].name" }).findByType("input");
+    const addedReferenceUrl = linksPanel.findByProps({ "data-profile-path": "references[1].linkedinUrl" }).findByType("input");
+    await act(async () => {
+      addedReferenceName.props.onChange({ target: { value: "New Reference" } });
+      addedReferenceUrl.props.onChange({ target: { value: "https://www.linkedin.com/in/new-reference" } });
+    });
 
     await act(async () => buttonWithText(renderer, "Değişiklikleri kaydet").props.onClick());
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/profile");
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: "PUT" });
-    await act(async () => vi.runAllTimers());
+    await act(async () => { vi.runAllTimers(); });
     renderer.unmount();
+  });
+
+  it("shows field-level URL validation and does not send an invalid profile", async () => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    let renderer!: ReactTestRenderer;
+    await act(async () => {
+      renderer = create(<ProfileEditor initialSection="links" initialSnapshot={snapshot} />);
+    });
+
+    const github = renderer.root.findByProps({ "aria-label": "GitHub URL" });
+    await act(async () => github.props.onChange({ target: { value: "github.com/example" } }));
+    await act(async () => buttonWithText(renderer, "Değişiklikleri kaydet").props.onClick());
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(instanceText(renderer.root)).toContain("https:// ile başlayan tam bir web adresi gir.");
+    expect(instanceText(renderer.root)).toContain("Lütfen işaretli alanları düzelt.");
+    renderer.unmount();
+  });
+
+  it("presents common schema failures as concise Turkish field guidance", async () => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    const invalidProfile = JSON.parse(JSON.stringify(profile)) as CandidateProfileDocument;
+    invalidProfile.experience = { years: -1, overrides: { "": 1, TypeScript: -1, typescript: 2 } };
+    invalidProfile.targeting.preferredRoles = [""];
+    invalidProfile.locations.preferred = ["İzmir"];
+    invalidProfile.locations.excluded = ["Izmir"];
+    invalidProfile.identity.githubUrl = "github.com/example";
+    invalidProfile.compensation.expectations.usd = -1;
+    invalidProfile.references = [{ name: "", linkedinUrl: "invalid", relationship: null }];
+    const invalidSnapshot = { ...snapshot, profile: invalidProfile };
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    let renderer!: ReactTestRenderer;
+    await act(async () => {
+      renderer = create(<ProfileEditor initialSnapshot={invalidSnapshot} />);
+    });
+
+    await act(async () => renderer.root.findByProps({ "aria-label": "Toplam deneyim yılı" }).props.onChange({ target: { value: "-2" } }));
+    await act(async () => buttonWithText(renderer, "Değişiklikleri kaydet").props.onClick());
+    const text = instanceText(renderer.root);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(text).toContain("İzin verilen sayı aralığında bir değer gir.");
+    expect(text).toContain("Teknoloji adı boş bırakılamaz.");
+    expect(text).toContain("Sıfır veya daha büyük bir sayı gir.");
+    expect(text).toContain("Bu teknoloji başka bir yazım varyasyonuyla zaten kayıtlı.");
+    expect(text).toContain("Aynı konum hem tercih edilen hem hariç tutulan listede olamaz.");
+    expect(text).toContain("Boş bir değer eklenemez.");
+    expect(text).toContain("Negatif bir değer kullanılamaz.");
+    expect(text).toContain("Bu alan zorunlu.");
+    renderer.unmount();
+  });
+
+  it("renders the revised field guidance and live contradiction warnings", () => {
+    const targets = renderToStaticMarkup(<ProfileEditor initialSection="targets" initialSnapshot={snapshot} />);
+    expect(targets).toContain("Gelişmiş eşleştirme sinyalleri");
+    expect(targets).toContain("yıl");
+
+    const locations = renderToStaticMarkup(<ProfileEditor initialSection="locations" initialSnapshot={snapshot} />);
+    expect(locations).toContain("1 benzersiz şehir");
+
+    const authorization = renderToStaticMarkup(<ProfileEditor initialSection="authorization" initialSnapshot={snapshot} />);
+    expect(authorization).toContain("en az bir bölgede sponsorluk gerekiyor");
+
+    const links = renderToStaticMarkup(<ProfileEditor initialSection="links" initialSnapshot={snapshot} />);
+    expect(links).toContain(" Aç</a>");
   });
 
   it("validates raw JSON, applies valid JSON, resets changes, and reports save conflicts", async () => {

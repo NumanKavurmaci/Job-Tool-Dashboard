@@ -194,7 +194,20 @@ function stringNumberOrNull(value: unknown, path: string, issues: string[]): Str
     issues.push(`${path} must be text, a number, or null.`);
     return null;
   }
+  if ((typeof value === "number" && value < 0) || (typeof value === "string" && /^\s*-\s*(?:\d|\.\d)/.test(value))) {
+    issues.push(`${path} must not be negative.`);
+  }
   return value;
+}
+
+export function normalizeProfileComparisonKey(value: string): string {
+  return value
+    .trim()
+    .toLocaleLowerCase("tr-TR")
+    .replace(/ı/g, "i")
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .replace(/\s+/g, " ");
 }
 
 function stringArray(value: unknown, path: string, issues: string[]): string[] {
@@ -203,7 +216,20 @@ function stringArray(value: unknown, path: string, issues: string[]): string[] {
     issues.push(`${path} must be a list of text values.`);
     return [];
   }
-  return [...value];
+  const result: string[] = [];
+  const seen = new Set<string>();
+  value.forEach((item, index) => {
+    const trimmed = item.trim();
+    if (!trimmed) {
+      issues.push(`${path}[${index}] must not be empty.`);
+      return;
+    }
+    const comparisonKey = normalizeProfileComparisonKey(trimmed);
+    if (seen.has(comparisonKey)) return;
+    seen.add(comparisonKey);
+    result.push(trimmed);
+  });
+  return result;
 }
 
 function numberRecord(value: unknown, path: string, issues: string[]): Record<string, number> {
@@ -213,12 +239,24 @@ function numberRecord(value: unknown, path: string, issues: string[]): Record<st
     return {};
   }
   const result: Record<string, number> = {};
+  const seen = new Set<string>();
   for (const [key, item] of Object.entries(value)) {
+    const trimmedKey = key.trim();
+    const comparisonKey = normalizeProfileComparisonKey(trimmedKey);
+    if (!trimmedKey) {
+      issues.push(`${path} contains an empty technology name.`);
+      continue;
+    }
+    if (seen.has(comparisonKey)) {
+      issues.push(`${path}.${key} duplicates another technology.`);
+      continue;
+    }
+    seen.add(comparisonKey);
     if (typeof item !== "number" || !Number.isFinite(item) || item < 0) {
       issues.push(`${path}.${key} must be a non-negative number.`);
       continue;
     }
-    result[key] = item;
+    result[trimmedKey] = item;
   }
   return result;
 }
@@ -244,12 +282,18 @@ function validateUrl(value: string | null, path: string, issues: string[], requi
     return value;
   }
   try {
-    new URL(value);
+    const url = new URL(value);
+    if ((url.protocol !== "http:" && url.protocol !== "https:") || !url.hostname) throw new Error("Unsupported URL");
     return value;
   } catch {
-    issues.push(`${path} must be a complete URL.`);
+    issues.push(`${path} must be a complete http(s) URL.`);
     return value;
   }
+}
+
+function findSharedValues(left: string[], right: string[]): string[] {
+  const rightKeys = new Set(right.map(normalizeProfileComparisonKey));
+  return left.filter((value) => rightKeys.has(normalizeProfileComparisonKey(value)));
 }
 
 export function normalizeCandidateProfile(input: unknown): CandidateProfileDocument {
@@ -313,6 +357,15 @@ export function normalizeCandidateProfile(input: unknown): CandidateProfileDocum
         })
       : (issues.push("references must be a list."), []);
 
+  const preferredLocations = stringArray(locations.preferred, "locations.preferred", issues);
+  const excludedLocations = stringArray(locations.excluded, "locations.excluded", issues);
+  const conflictingLocations = findSharedValues(preferredLocations, excludedLocations);
+  if (conflictingLocations.length > 0) {
+    const names = conflictingLocations.join(", ");
+    issues.push(`locations.preferred conflicts with locations.excluded: ${names}.`);
+    issues.push(`locations.excluded conflicts with locations.preferred: ${names}.`);
+  }
+
   const profile: CandidateProfileDocument = {
     ...input,
     experience: {
@@ -331,8 +384,8 @@ export function normalizeCandidateProfile(input: unknown): CandidateProfileDocum
     },
     locations: {
       ...locations,
-      preferred: stringArray(locations.preferred, "locations.preferred", issues),
-      excluded: stringArray(locations.excluded, "locations.excluded", issues),
+      preferred: preferredLocations,
+      excluded: excludedLocations,
       workplacePolicyBypass: stringArray(locations.workplacePolicyBypass, "locations.workplacePolicyBypass", issues),
       allowedHybrid: stringArray(locations.allowedHybrid, "locations.allowedHybrid", issues),
       remotePreference: enumValue(locations.remotePreference, REMOTE_PREFERENCES, "flexible", "locations.remotePreference", issues),

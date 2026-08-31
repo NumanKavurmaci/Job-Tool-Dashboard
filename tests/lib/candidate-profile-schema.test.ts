@@ -3,7 +3,18 @@ import {
   CandidateProfileValidationError,
   createEmptyCandidateProfile,
   normalizeCandidateProfile,
+  normalizeProfileComparisonKey,
 } from "@/lib/candidate-profile-schema";
+
+function validationIssues(input: unknown): string[] {
+  try {
+    normalizeCandidateProfile(input);
+    return [];
+  } catch (error) {
+    if (error instanceof CandidateProfileValidationError) return error.issues;
+    throw error;
+  }
+}
 
 describe("candidate profile schema", () => {
   it("fills the backend defaults for an empty profile", () => {
@@ -61,5 +72,38 @@ describe("candidate profile schema", () => {
     expect(profile.compensation.expectations).toEqual({ usd: 2000, eur: "1800", try: null });
     expect(profile.availability.noticePeriod).toBe(0);
     expect(profile.personal.disability.disabilities[0]?.percentage).toBe(46);
+  });
+
+  it("collapses case and Turkish diacritic aliases in list fields", () => {
+    const profile = normalizeCandidateProfile({
+      targeting: { preferredRoles: ["Backend Engineer", "backend engineer"] },
+      locations: { allowedHybrid: ["Izmir", "İzmir", "Eskisehir", "Eskişehir"] },
+    });
+
+    expect(profile.targeting.preferredRoles).toEqual(["Backend Engineer"]);
+    expect(profile.locations.allowedHybrid).toEqual(["Izmir", "Eskisehir"]);
+    expect(normalizeProfileComparisonKey(" İSTANBUL ")).toBe("istanbul");
+  });
+
+  it("rejects conflicting locations and invalid override keys", () => {
+    expect(validationIssues({
+      locations: { preferred: ["İzmir"], excluded: ["Izmir"] },
+    })).toContain("locations.preferred conflicts with locations.excluded: İzmir.");
+
+    expect(validationIssues({
+      experience: { overrides: { "": 1, TypeScript: 2, typescript: 3 } },
+    })).toEqual(expect.arrayContaining([
+      "experience.overrides contains an empty technology name.",
+      "experience.overrides.typescript duplicates another technology.",
+    ]));
+  });
+
+  it("requires web URLs and blocks negative compensation without inventing a period", () => {
+    expect(validationIssues({ identity: { githubUrl: "ftp://example.com/profile" } })).toContain("identity.githubUrl must be a complete http(s) URL.");
+    expect(validationIssues({ compensation: { expectations: { usd: -1 } } })).toContain("compensation.expectations.usd must not be negative.");
+    expect(validationIssues({ compensation: { expectations: { usd: "-2000 yearly" } } })).toContain("compensation.expectations.usd must not be negative.");
+
+    const profile = normalizeCandidateProfile({ compensation: { expectations: { usd: "2000 yearly", eur: "1800 monthly" } } });
+    expect(profile.compensation.expectations).toMatchObject({ usd: "2000 yearly", eur: "1800 monthly" });
   });
 });
