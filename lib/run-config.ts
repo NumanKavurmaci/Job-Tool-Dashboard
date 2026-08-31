@@ -184,11 +184,13 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
       },
       {
         key: "count",
-        label: "Job Count",
+        label: "Application Target",
         type: "number",
         defaultValue: 10,
         min: 1,
         max: 1000,
+        description:
+          "Target number of ready/submitted applications; failed attempts do not consume the target.",
       },
       {
         key: "scoreThreshold",
@@ -282,11 +284,13 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
       },
       {
         key: "count",
-        label: "Job Count",
+        label: "Application Target",
         type: "number",
         defaultValue: 25,
         min: 1,
         max: 1000,
+        description:
+          "For LinkedIn, targets ready/submitted applications; failed attempts do not consume the target.",
       },
       {
         key: "scoreThreshold",
@@ -624,7 +628,7 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
       }
       args.push(url);
 
-      pushBoundedIntegerArg(args, "--count", "count", "Job count", values, 1, 1000);
+      pushBoundedIntegerArg(args, "--count", "count", "Application target", values, 1, 1000);
       pushBoundedIntegerArg(args, "--score-threshold", "scoreThreshold", "Score threshold", values, 1, 100);
       pushStringArg(args, "--resume", stringValue("resumePath"));
 
@@ -647,7 +651,7 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
       }
       args.push(url);
 
-      pushBoundedIntegerArg(args, "--count", "count", "Job count", values, 1, 1000);
+      pushBoundedIntegerArg(args, "--count", "count", "Application target", values, 1, 1000);
       pushBoundedIntegerArg(args, "--score-threshold", "scoreThreshold", "Score threshold", values, 1, 100);
       pushStringArg(args, "--resume", stringValue("resumePath"));
 

@@ -190,7 +190,7 @@ describe("run config", () => {
         url: "https://www.linkedin.com/jobs/collections/easy-apply",
         count: 1001,
       }),
-    ).toThrow("Job count must be an integer between 1 and 1000.");
+    ).toThrow("Application target must be an integer between 1 and 1000.");
     expect(() =>
       buildRunArgs("explore-batch", {
         url: "https://www.linkedin.com/jobs/collections/easy-apply",
@@ -211,6 +211,16 @@ describe("run config", () => {
 
     for (const type of ["explore-batch", "easy-apply-batch", "apply-batch"] as const) {
       expect(getRunScriptDefinition(type).fields.find((field) => field.key === "count")?.max).toBe(1000);
+    }
+  });
+
+  it("describes LinkedIn batch count as a successful application target", () => {
+    for (const type of ["easy-apply-batch", "apply-batch"] as const) {
+      const countField = getRunScriptDefinition(type).fields.find(
+        (field) => field.key === "count",
+      );
+      expect(countField?.label).toBe("Application Target");
+      expect(countField?.description).toContain("failed attempts do not consume the target");
     }
   });
 
