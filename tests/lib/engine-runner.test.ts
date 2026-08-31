@@ -100,6 +100,76 @@ describe("engine runner", () => {
     expect(readRunProgressMock).toHaveBeenCalledWith(expect.objectContaining({ runId: run.id }));
   });
 
+  it("rejects an empty engine command before spawning", async () => {
+    const { startEngineRun } = await import("@/lib/engine-runner");
+
+    expect(() => startEngineRun([])).toThrow("At least one engine argument is required.");
+    expect(spawnMock).not.toHaveBeenCalled();
+  });
+
+  it("records a synchronous spawn failure as a terminal failed run", async () => {
+    spawnMock.mockImplementation(() => {
+      throw new Error("spawn denied");
+    });
+    const { getRun, getRunEvents, startEngineRun } = await import("@/lib/engine-runner");
+
+    const run = startEngineRun(["score", "https://jobs.example.com/job/1"]);
+
+    expect(run).toMatchObject({ status: "failed", exitCode: null, pid: null });
+    expect(getRun(run.id)?.finishedAt).not.toBeNull();
+    expect(getRunEvents(run.id)).toEqual([
+      expect.objectContaining({ type: "run_failed", message: "spawn denied", sequence: 1 }),
+    ]);
+  });
+
+  it("captures non-empty stdout/stderr lines in order and notifies subscribers", async () => {
+    const child = fakeChild();
+    spawnMock.mockReturnValue(child);
+    const { getRunEvents, startEngineRun, subscribeToRun } = await import("@/lib/engine-runner");
+    const run = startEngineRun(["score", "https://jobs.example.com/job/1"]);
+    const listener = vi.fn();
+    const unsubscribe = subscribeToRun(run.id, listener);
+
+    child.stdout.emit("data", Buffer.from("first line\n\nsecond line\r\n"));
+    child.stderr.emit("data", Buffer.from("warning\n"));
+    unsubscribe();
+    child.stdout.emit("data", Buffer.from("after unsubscribe\n"));
+
+    expect(getRunEvents(run.id)?.map((event) => [event.sequence, event.type, event.message]))
+      .toEqual([
+        [1, "run_started", "Started score."],
+        [2, "stdout", "first line"],
+        [3, "stdout", "second line"],
+        [4, "stderr", "warning"],
+        [5, "stdout", "after unsubscribe"],
+      ]);
+    expect(listener).toHaveBeenCalledTimes(3);
+    expect(listener).not.toHaveBeenCalledWith(
+      expect.objectContaining({ message: "after unsubscribe" }),
+    );
+  });
+
+  it("returns run snapshots even when progress inspection throws", async () => {
+    const child = fakeChild();
+    spawnMock.mockReturnValue(child);
+    readRunProgressMock.mockImplementation(() => {
+      throw new Error("database locked");
+    });
+    const { getRun, startEngineRun } = await import("@/lib/engine-runner");
+
+    const run = startEngineRun(["score", "https://jobs.example.com/job/1"]);
+
+    expect(getRun(run.id)).toMatchObject({ id: run.id, status: "running", progress: null });
+  });
+
+  it("returns null for unknown run lookups and throws a typed stop error", async () => {
+    const { getRun, getRunEvents, RunNotFoundError, stopEngineRun } = await import("@/lib/engine-runner");
+
+    expect(getRun("missing")).toBeNull();
+    expect(getRunEvents("missing")).toBeNull();
+    expect(() => stopEngineRun("missing")).toThrow(RunNotFoundError);
+  });
+
   it("keeps a pre-correlation hot-reloaded run on the legacy time fallback", async () => {
     const child = fakeChild(404);
     (globalThis as unknown as Record<string, unknown>).__jobToolDashboardRunManager = {
@@ -243,6 +313,57 @@ describe("engine runner", () => {
 
     expect(getRun(first.id)?.status).toBe("stopped");
     expect(getRun(second.id)?.status).toBe("running");
+  });
+
+  it("restores a running state and records an event when process termination fails", async () => {
+    const child = fakeChild();
+    child.kill.mockReturnValue(false);
+    spawnMock.mockReturnValue(child);
+    spawnSyncMock.mockReturnValue({ status: 1 });
+    const { getRun, getRunEvents, startEngineRun, stopEngineRun } = await import("@/lib/engine-runner");
+
+    const run = startEngineRun(["external-apply", "https://forms.example.com/a", "--dry-run"]);
+    const result = stopEngineRun(run.id);
+
+    expect(result.status).toBe("running");
+    expect(getRun(run.id)?.status).toBe("running");
+    expect(getRunEvents(run.id)?.slice(-2)).toEqual([
+      expect.objectContaining({ type: "run_stop_requested" }),
+      expect.objectContaining({ type: "run_stop_failed" }),
+    ]);
+  });
+
+  it("requires an id when stopCurrentRun would be ambiguous", async () => {
+    spawnMock.mockReturnValueOnce(fakeChild(101)).mockReturnValueOnce(fakeChild(202));
+    const { RunIdRequiredError, startEngineRun, stopCurrentRun } = await import("@/lib/engine-runner");
+    startEngineRun(["external-apply", "https://forms.example.com/a", "--dry-run"]);
+    startEngineRun(["external-apply", "https://forms.example.com/b", "--dry-run"]);
+
+    expect(() => stopCurrentRun()).toThrow(RunIdRequiredError);
+  });
+
+  it("returns the latest terminal run when there is nothing active to stop", async () => {
+    const child = fakeChild();
+    spawnMock.mockReturnValue(child);
+    const { startEngineRun, stopCurrentRun } = await import("@/lib/engine-runner");
+    const run = startEngineRun(["score", "https://jobs.example.com/job/1"]);
+    child.emit("close", 0);
+
+    expect(stopCurrentRun()).toMatchObject({ id: run.id, status: "completed" });
+  });
+
+  it("marks an unknown child exit code as a failure with a stable message", async () => {
+    const child = fakeChild();
+    spawnMock.mockReturnValue(child);
+    const { getRunEvents, startEngineRun } = await import("@/lib/engine-runner");
+    const run = startEngineRun(["score", "https://jobs.example.com/job/1"]);
+
+    child.emit("close", null);
+
+    expect(getRunEvents(run.id)?.at(-1)).toMatchObject({
+      type: "run_failed",
+      message: "Engine run exited with code unknown.",
+    });
   });
 
   it("keeps one run active when the other child closes", async () => {

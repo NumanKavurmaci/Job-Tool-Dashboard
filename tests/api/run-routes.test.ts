@@ -203,6 +203,44 @@ describe("run API routes", () => {
     expect(startEngineRunMock).not.toHaveBeenCalled();
   });
 
+  it("rejects an oversized UTF-8 body even without a Content-Length header", async () => {
+    const response = await startRun(
+      new Request("http://127.0.0.1:3000/api/run/start", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: "http://127.0.0.1:3000",
+          "Sec-Fetch-Site": "same-origin",
+        },
+        body: JSON.stringify({ padding: "🙂".repeat(9_000) }),
+      }),
+    );
+
+    expect(response.status).toBe(413);
+    await expect(response.json()).resolves.toEqual({ error: "Run request is too large." });
+    expect(startEngineRunMock).not.toHaveBeenCalled();
+  });
+
+  it.each(["", "{not-json", "null"])(
+    "returns a no-store 400 for an invalid JSON body: %j",
+    async (body) => {
+      const response = await startRun(
+        new Request("http://127.0.0.1:3000/api/run/start", {
+          method: "POST",
+          headers: {
+            Origin: "http://127.0.0.1:3000",
+            "Sec-Fetch-Site": "same-origin",
+          },
+          body,
+        }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(response.headers.get("cache-control")).toContain("no-store");
+      expect(startEngineRunMock).not.toHaveBeenCalled();
+    },
+  );
+
   it("rejects unknown run types, invalid provider URLs, and out-of-range numbers", async () => {
     const unknownType = await startRun(
       requestFor("/api/run/start", { type: "shell", values: {} }),
@@ -375,6 +413,60 @@ describe("run API routes", () => {
     expect(startEngineRunMock).not.toHaveBeenCalled();
   });
 
+  it("returns the started run together with the authoritative registry state", async () => {
+    const run = { id: "run-9", status: "running" };
+    const state = {
+      runs: [run],
+      activeCount: 1,
+      maxActive: 2,
+      available: 1,
+    };
+    startEngineRunMock.mockReturnValue(run);
+    getRunRegistryStateMock.mockReturnValue(state);
+
+    const response = await startRun(
+      requestFor("/api/run/start", {
+        type: "score",
+        values: { url: "https://jobs.example.com/job/9" },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ run, ...state });
+  });
+
+  it("returns a no-store 500 when readiness inspection fails", async () => {
+    readEngineConfigStatusMock.mockRejectedValue(new Error("status unavailable"));
+
+    const response = await startRun(
+      requestFor("/api/run/start", {
+        type: "score",
+        values: { url: "https://jobs.example.com/job/1" },
+      }),
+    );
+
+    expect(response.status).toBe(500);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    await expect(response.json()).resolves.toMatchObject({ error: "status unavailable" });
+    expect(startEngineRunMock).not.toHaveBeenCalled();
+  });
+
+  it("uses a safe generic 500 message for a non-Error runner failure", async () => {
+    startEngineRunMock.mockImplementation(() => {
+      throw "runner failed";
+    });
+
+    const response = await startRun(
+      requestFor("/api/run/start", {
+        type: "score",
+        values: { url: "https://jobs.example.com/job/1" },
+      }),
+    );
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({ error: "Failed to start run." });
+  });
+
   it("keeps the current-run alias while adding the two-run registry state", async () => {
     const primary = { id: "run-1", status: "running" };
     const secondary = { id: "run-2", status: "running" };
@@ -457,6 +549,44 @@ describe("run API routes", () => {
     expect(stopCurrentRunMock).toHaveBeenCalledWith("run-2");
   });
 
+  it("treats a non-string or blank legacy run id as omitted", async () => {
+    const numeric = await stopRun(requestFor("/api/run/stop", { runId: 42 }));
+    const blank = await stopRun(requestFor("/api/run/stop", { runId: "   " }));
+
+    expect(numeric.status).toBe(200);
+    expect(blank.status).toBe(200);
+    expect(stopCurrentRunMock).toHaveBeenNthCalledWith(1, undefined);
+    expect(stopCurrentRunMock).toHaveBeenNthCalledWith(2, undefined);
+  });
+
+  it("returns 400 and does not stop a run when the legacy body is invalid JSON", async () => {
+    const response = await stopRun(
+      new Request("http://127.0.0.1:3000/api/run/stop", {
+        method: "POST",
+        headers: {
+          Origin: "http://127.0.0.1:3000",
+          "Sec-Fetch-Site": "same-origin",
+        },
+        body: "{invalid",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    expect(stopCurrentRunMock).not.toHaveBeenCalled();
+  });
+
+  it("returns a typed 404 from the legacy stop route", async () => {
+    stopCurrentRunMock.mockImplementation(() => {
+      throw new RunNotFoundError("missing-run");
+    });
+
+    const response = await stopRun(requestFor("/api/run/stop", { runId: "missing-run" }));
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({ code: "RUN_NOT_FOUND" });
+  });
+
   it("requires a run id when the legacy stop route is ambiguous", async () => {
     stopCurrentRunMock.mockImplementation(() => {
       throw new RunIdRequiredError();
@@ -512,6 +642,23 @@ describe("run API routes", () => {
     expect(response.headers.get("cache-control")).toContain("no-store");
     await expect(response.json()).resolves.toMatchObject({
       code: "RUN_NOT_FOUND",
+    });
+  });
+
+  it("returns a no-store 500 for an unexpected targeted stop failure", async () => {
+    stopEngineRunMock.mockImplementation(() => {
+      throw new Error("process manager unavailable");
+    });
+
+    const response = await stopRunById(
+      requestFor("/api/run/run-2/stop"),
+      runContext("run-2"),
+    );
+
+    expect(response.status).toBe(500);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    await expect(response.json()).resolves.toEqual({
+      error: "process manager unavailable",
     });
   });
 });
