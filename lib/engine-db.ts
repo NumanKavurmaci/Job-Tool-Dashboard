@@ -159,6 +159,7 @@ export type RecommendationRow = {
   summary: string;
   reasons: string;
   detailsJson: string | null;
+  dashboardRunId: string | null;
   createdAt: string;
   updatedAt: string;
   jobPostingId: string;
@@ -600,6 +601,10 @@ export function readRecommendations(limit = 40): RecommendationRow[] {
           r.summary,
           r.reasons,
           r.detailsJson,
+          CASE
+            WHEN json_valid(r.detailsJson) THEN json_extract(r.detailsJson, '$.dashboardRunId')
+            ELSE NULL
+          END AS dashboardRunId,
           r.createdAt,
           r.updatedAt,
           r.jobPostingId,
