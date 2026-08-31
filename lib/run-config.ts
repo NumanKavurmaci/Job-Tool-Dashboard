@@ -84,14 +84,14 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
         type: "number",
         defaultValue: 25,
         min: 1,
-        max: 100,
+        max: 1000,
       },
       {
         key: "scoreThreshold",
         label: "Score Threshold",
         type: "number",
         defaultValue: 40,
-        min: 0,
+        min: 1,
         max: 100,
       },
       {
@@ -105,7 +105,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
         key: "scoringMode",
         label: "Scoring Mode",
         type: "select",
-        defaultValue: "local",
+        defaultValue: "ai",
         options: [
           { value: "local", label: "Local deterministic" },
           { value: "ai", label: "AI direct score" },
@@ -130,7 +130,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
         key: "scoringMode",
         label: "Scoring Mode",
         type: "select",
-        defaultValue: "local",
+        defaultValue: "ai",
         options: [
           { value: "local", label: "Local deterministic" },
           { value: "ai", label: "AI direct score" },
@@ -156,7 +156,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
         key: "dryRun",
         label: "Dry Run",
         type: "checkbox",
-        defaultValue: true,
+        defaultValue: false,
         description: "Adds --dry-run so the flow stops before the final submit.",
       },
       {
@@ -188,14 +188,14 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
         type: "number",
         defaultValue: 10,
         min: 1,
-        max: 100,
+        max: 1000,
       },
       {
         key: "scoreThreshold",
         label: "Score Threshold",
         type: "number",
         defaultValue: 40,
-        min: 0,
+        min: 1,
         max: 100,
       },
       {
@@ -209,7 +209,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
         key: "scoringMode",
         label: "Scoring Mode",
         type: "select",
-        defaultValue: "local",
+        defaultValue: "ai",
         options: [
           { value: "local", label: "Local deterministic" },
           { value: "ai", label: "AI direct score" },
@@ -219,7 +219,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
         key: "dryRun",
         label: "Dry Run",
         type: "checkbox",
-        defaultValue: true,
+        defaultValue: false,
         description: "Adds --dry-run while keeping the batch command shape unchanged.",
       },
       {
@@ -250,7 +250,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
         key: "dryRun",
         label: "Dry Run",
         type: "checkbox",
-        defaultValue: true,
+        defaultValue: false,
         description: "Adds --dry-run so the flow rehearses the path without final submission.",
       },
       {
@@ -286,14 +286,14 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
         type: "number",
         defaultValue: 25,
         min: 1,
-        max: 100,
+        max: 1000,
       },
       {
         key: "scoreThreshold",
         label: "Score Threshold",
         type: "number",
         defaultValue: 40,
-        min: 0,
+        min: 1,
         max: 100,
       },
       {
@@ -307,7 +307,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
         key: "scoringMode",
         label: "Scoring Mode",
         type: "select",
-        defaultValue: "local",
+        defaultValue: "ai",
         options: [
           { value: "local", label: "Local deterministic" },
           { value: "ai", label: "AI direct score" },
@@ -317,7 +317,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
         key: "dryRun",
         label: "Dry Run",
         type: "checkbox",
-        defaultValue: true,
+        defaultValue: false,
         description: "Adds --dry-run while keeping the all-apply batch command shape unchanged.",
       },
       {
@@ -347,7 +347,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
         key: "dryRun",
         label: "Dry Run",
         type: "checkbox",
-        defaultValue: true,
+        defaultValue: false,
         description: "Adds --dry-run so the script only rehearses the flow.",
       },
       {
@@ -390,7 +390,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
         key: "scoringMode",
         label: "Scoring Mode",
         type: "select",
-        defaultValue: "local",
+        defaultValue: "ai",
         options: [
           { value: "local", label: "Local deterministic" },
           { value: "ai", label: "AI direct score" },
@@ -415,7 +415,7 @@ export const RUN_SCRIPT_DEFINITIONS: RunScriptDefinition[] = [
         key: "scoringMode",
         label: "Scoring Mode",
         type: "select",
-        defaultValue: "local",
+        defaultValue: "ai",
         options: [
           { value: "local", label: "Local deterministic" },
           { value: "ai", label: "AI direct score" },
@@ -582,8 +582,8 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
       }
       args.push(url);
 
-      pushBoundedIntegerArg(args, "--count", "count", "Job count", values, 1, 100);
-      pushBoundedIntegerArg(args, "--score-threshold", "scoreThreshold", "Score threshold", values, 0, 100);
+      pushBoundedIntegerArg(args, "--count", "count", "Job count", values, 1, 1000);
+      pushBoundedIntegerArg(args, "--score-threshold", "scoreThreshold", "Score threshold", values, 1, 100);
 
       if (booleanValue("disableAiEvaluation")) {
         args.push("--disable-ai-evaluation");
@@ -600,7 +600,7 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
       }
       args.push(url);
       pushStringArg(args, "--resume", stringValue("resumePath"));
-      if (values.dryRun !== false) {
+      if (values.dryRun === true) {
         args.push("--dry-run");
       }
       return args;
@@ -612,7 +612,7 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
       }
       args.push(url);
       pushStringArg(args, "--resume", stringValue("resumePath"));
-      if (values.dryRun !== false) {
+      if (values.dryRun === true) {
         args.push("--dry-run");
       }
       return args;
@@ -624,8 +624,8 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
       }
       args.push(url);
 
-      pushBoundedIntegerArg(args, "--count", "count", "Job count", values, 1, 100);
-      pushBoundedIntegerArg(args, "--score-threshold", "scoreThreshold", "Score threshold", values, 0, 100);
+      pushBoundedIntegerArg(args, "--count", "count", "Job count", values, 1, 1000);
+      pushBoundedIntegerArg(args, "--score-threshold", "scoreThreshold", "Score threshold", values, 1, 100);
       pushStringArg(args, "--resume", stringValue("resumePath"));
 
       if (booleanValue("disableAiEvaluation")) {
@@ -634,7 +634,7 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
 
       pushScoringMode();
 
-      if (values.dryRun !== false) {
+      if (values.dryRun === true) {
         args.push("--dry-run");
       }
 
@@ -647,8 +647,8 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
       }
       args.push(url);
 
-      pushBoundedIntegerArg(args, "--count", "count", "Job count", values, 1, 100);
-      pushBoundedIntegerArg(args, "--score-threshold", "scoreThreshold", "Score threshold", values, 0, 100);
+      pushBoundedIntegerArg(args, "--count", "count", "Job count", values, 1, 1000);
+      pushBoundedIntegerArg(args, "--score-threshold", "scoreThreshold", "Score threshold", values, 1, 100);
       pushStringArg(args, "--resume", stringValue("resumePath"));
 
       if (booleanValue("disableAiEvaluation")) {
@@ -657,7 +657,7 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
 
       pushScoringMode();
 
-      if (values.dryRun !== false) {
+      if (values.dryRun === true) {
         args.push("--dry-run");
       }
 
@@ -670,7 +670,7 @@ export function buildRunArgs(type: RunScriptType, values: RunFormValues): string
       }
       args.push(url);
       pushStringArg(args, "--resume", stringValue("resumePath"));
-      if (values.dryRun !== false) {
+      if (values.dryRun === true) {
         args.push("--dry-run");
       }
 

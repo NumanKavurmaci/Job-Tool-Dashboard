@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { closeSync, openSync, readFileSync, readSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
+import { buildArtifactId, readArtifactById, type RunOutcomeJob } from "./engine-artifacts";
 import { getEngineArtifactsPath, getEngineDbPath, getEngineLogPath } from "./engine-paths";
 
 export type RunProgressReview = {
@@ -15,6 +16,13 @@ export type RunProgressReview = {
   title: string | null;
   company: string | null;
   location: string | null;
+  applicationType?: "easy_apply" | "external" | null;
+  externalApplyUrl?: string | null;
+};
+
+type RunProgressReviewRow = Omit<RunProgressReview, "createdAt"> & {
+  createdAt: string | number;
+  detailsJson: string | null;
 };
 
 export type RunProgressSummary = {
@@ -25,6 +33,10 @@ export type RunProgressSummary = {
   applyDecisionCount: number;
   currentActivity: RunCurrentActivity | null;
   lastObservedActivity?: RunCurrentActivity | null;
+  terminalOutcome: {
+    status: "success" | "partial" | "failed";
+    reason: string | null;
+  } | null;
   latestArtifact: {
     name: string;
     fullPath: string;
@@ -35,7 +47,7 @@ export type RunProgressSummary = {
 };
 
 export type RunCurrentActivity = {
-  stage: "starting" | "scanning" | "evaluating" | "applying" | "submitted" | "failed" | "completed" | "stopped";
+  stage: "starting" | "scanning" | "evaluating" | "applying" | "submitted" | "partial" | "failed" | "completed" | "stopping" | "stopped";
   label: string;
   detail: string | null;
   jobUrl: string | null;
@@ -73,17 +85,32 @@ function sourceForMode(mode?: string): string | null {
 
 export function readRunProgress(args: {
   startedAt: string;
+  finishedAt?: string | null;
+  runId?: string;
   mode?: string;
   limit?: number;
 }): RunProgressSummary {
   const startedAtMs = Date.parse(args.startedAt);
+  const finishedAtMs = args.finishedAt ? Date.parse(args.finishedAt) : null;
   const db = openDb();
   try {
     const source = sourceForMode(args.mode);
     const params: Array<string | number> = [Number.isFinite(startedAtMs) ? startedAtMs : args.startedAt];
+    const finishedSql = finishedAtMs !== null && Number.isFinite(finishedAtMs)
+      ? "AND h.createdAt <= ?"
+      : "";
+    if (finishedSql) {
+      params.push(finishedAtMs as number);
+    }
     const sourceSql = source ? "AND h.source = ?" : "";
     if (source) {
       params.push(source);
+    }
+    const runIdSql = args.runId
+      ? "AND CASE WHEN json_valid(h.detailsJson) THEN json_extract(h.detailsJson, '$.dashboardRunId') ELSE NULL END = ?"
+      : "";
+    if (args.runId) {
+      params.push(args.runId);
     }
 
     const rows = db
@@ -98,6 +125,7 @@ export function readRunProgress(args: {
           h.decision,
           h.policyAllowed,
           h.summary,
+          h.detailsJson,
           COALESCE(j.title, (
             SELECT jp.title FROM JobPosting jp WHERE jp.url = h.jobUrl LIMIT 1
           )) AS title,
@@ -110,17 +138,26 @@ export function readRunProgress(args: {
         FROM JobReviewHistory h
         LEFT JOIN JobPosting j ON j.id = h.jobPostingId
         WHERE h.createdAt >= ?
+        ${finishedSql}
         ${sourceSql}
+        ${runIdSql}
         ORDER BY h.createdAt ASC
         LIMIT ?
         `,
       )
-      .all(...params, args.limit ?? 200) as Array<Omit<RunProgressReview, "createdAt"> & { createdAt: string | number }>;
+      .all(...params, args.limit ?? 200) as RunProgressReviewRow[];
 
-    const reviews = rows.map((row) => ({
-      ...row,
-      createdAt: normalizeCreatedAt(row.createdAt),
-    }));
+    const persistedReviews = collapseReviewOutcomes(
+      rows.map(mapReviewRow),
+    );
+    const latestArtifact = readLatestRunArtifact(args.startedAt, args.finishedAt, args.runId);
+    const baseReviews = persistedReviews.length > 0
+      ? persistedReviews
+      : readArtifactOutcomeReviews(latestArtifact);
+    const finishedAtBound = finishedAtMs !== null && Number.isFinite(finishedAtMs) ? finishedAtMs : null;
+    const logEntries = readRecentLogEntries(startedAtMs, finishedAtBound, args.runId);
+    const reviews = enrichReviewsWithRuntimeSignals(baseReviews, logEntries);
+    const terminalOutcome = readArtifactTerminalOutcome(latestArtifact);
 
     const uniqueReviewedJobs = new Set(reviews.map((review) => review.jobUrl));
     return {
@@ -131,14 +168,175 @@ export function readRunProgress(args: {
       applyDecisionCount: reviews.filter((review) => review.decision === "APPLY").length,
       currentActivity: inferCurrentActivity({
         startedAtMs,
+        entries: logEntries,
         reviews,
       }),
-      latestArtifact: readLatestRunArtifact(args.startedAt),
+      latestArtifact,
+      terminalOutcome,
       reviews,
     };
   } finally {
     db.close();
   }
+}
+
+function collapseReviewOutcomes(reviews: RunProgressReview[]): RunProgressReview[] {
+  const latestByUrl = new Map<string, RunProgressReview>();
+  for (const review of reviews) {
+    latestByUrl.set(normalizeJobUrl(review.jobUrl) ?? review.jobUrl, review);
+  }
+
+  return [...latestByUrl.values()].sort(
+    (left, right) => Date.parse(left.createdAt) - Date.parse(right.createdAt),
+  );
+}
+
+export function readLatestJobOutcomes(limit = 8): RunProgressReview[] {
+  const boundedLimit = Math.max(0, Math.min(limit, 50));
+  if (boundedLimit === 0) {
+    return [];
+  }
+
+  let persistedReviews: RunProgressReview[] = [];
+  try {
+    const db = openDb();
+    try {
+      const rows = db.prepare(`
+        SELECT
+          h.createdAt,
+          h.jobUrl,
+          h.status,
+          h.score,
+          h.threshold,
+          h.decision,
+          h.policyAllowed,
+          h.summary,
+          h.detailsJson,
+          COALESCE(j.title, (
+            SELECT jp.title FROM JobPosting jp WHERE jp.url = h.jobUrl LIMIT 1
+          )) AS title,
+          COALESCE(j.company, (
+            SELECT jp.company FROM JobPosting jp WHERE jp.url = h.jobUrl LIMIT 1
+          )) AS company,
+          COALESCE(j.location, (
+            SELECT jp.location FROM JobPosting jp WHERE jp.url = h.jobUrl LIMIT 1
+          )) AS location
+        FROM JobReviewHistory h
+        LEFT JOIN JobPosting j ON j.id = h.jobPostingId
+        ORDER BY h.createdAt DESC
+        LIMIT ?
+      `).all(Math.max(50, boundedLimit * 8)) as RunProgressReviewRow[];
+      persistedReviews = rows.map(mapReviewRow);
+    } finally {
+      db.close();
+    }
+  } catch {
+    // Artifact outcomes still provide a useful fallback if the database is unavailable.
+  }
+
+  const combined = [...persistedReviews, ...readMostRecentArtifactOutcomeReviews()]
+    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
+  const latestByUrl = new Map<string, RunProgressReview>();
+  for (const review of combined) {
+    const key = normalizeJobUrl(review.jobUrl) ?? review.jobUrl;
+    if (!latestByUrl.has(key)) {
+      latestByUrl.set(key, review);
+    }
+  }
+
+  return [...latestByUrl.values()].slice(0, boundedLimit);
+}
+
+function readArtifactOutcomeReviews(
+  artifact: RunProgressSummary["latestArtifact"],
+): RunProgressReview[] {
+  if (!artifact) {
+    return [];
+  }
+
+  const summary = readArtifactById(buildArtifactId("batch-runs", artifact.name));
+  const outcomes = summary?.details?.outcomeJobs;
+  if (!outcomes) {
+    return [];
+  }
+
+  const byUrl = new Map<string, RunOutcomeJob>();
+  for (const job of [...outcomes.recommended, ...outcomes.incomplete, ...outcomes.applied]) {
+    byUrl.set(normalizeJobUrl(job.url) ?? job.url, job);
+  }
+
+  return [...byUrl.values()].map((job) => ({
+    createdAt: artifact.updatedAt,
+    jobUrl: job.url,
+    status: (job.status ?? (job.decision === "APPLY" ? "EVALUATED" : "UNKNOWN")).toUpperCase(),
+    score: job.score,
+    threshold: null,
+    decision: job.decision,
+    policyAllowed: null,
+    summary: job.reason,
+    title: job.title,
+    company: job.company,
+    location: job.location,
+    applicationType: job.platform ? "external" : null,
+  }));
+}
+
+function readArtifactTerminalOutcome(
+  artifact: RunProgressSummary["latestArtifact"],
+): RunProgressSummary["terminalOutcome"] {
+  if (!artifact) {
+    return null;
+  }
+
+  const details = readArtifactById(buildArtifactId("batch-runs", artifact.name))?.details;
+  const status = details?.status?.trim().toLowerCase();
+  if (!status) {
+    return null;
+  }
+
+  if (status === "partial" || status.startsWith("stopped_")) {
+    return { status: "partial", reason: details?.stopReason ?? null };
+  }
+  if (status === "failed" || status === "error") {
+    return { status: "failed", reason: details?.stopReason ?? null };
+  }
+  if (["success", "completed", "submitted"].includes(status)) {
+    return { status: "success", reason: details?.stopReason ?? null };
+  }
+
+  return null;
+}
+
+function readMostRecentArtifactOutcomeReviews(): RunProgressReview[] {
+  const batchDir = path.join(getEngineArtifactsPath(), "batch-runs");
+  try {
+    const candidates = readdirSync(batchDir)
+      .filter((name) => name.toLowerCase().endsWith(".json"))
+      .map((name) => {
+        const fullPath = path.join(batchDir, name);
+        const stat = statSync(fullPath);
+        return {
+          name,
+          fullPath,
+          updatedAt: stat.mtime.toISOString(),
+          size: stat.size,
+          modifiedAt: stat.mtimeMs,
+        };
+      })
+      .sort((left, right) => right.modifiedAt - left.modifiedAt)
+      .slice(0, 5);
+
+    for (const candidate of candidates) {
+      const reviews = readArtifactOutcomeReviews(candidate);
+      if (reviews.length > 0) {
+        return reviews;
+      }
+    }
+  } catch {
+    return [];
+  }
+
+  return [];
 }
 
 function normalizeCreatedAt(value: string | number): string {
@@ -150,8 +348,98 @@ function normalizeCreatedAt(value: string | number): string {
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : value;
 }
 
+function mapReviewRow(row: RunProgressReviewRow): RunProgressReview {
+  const { detailsJson, ...review } = row;
+  const details = parseJsonObject(detailsJson);
+  const diagnostics = objectValue(details?.diagnostics);
+  const externalApplication = objectValue(details?.externalApplication);
+  const explicitApplicationType = normalizeApplicationType(
+    stringValue(details?.applicationType) ?? stringValue(diagnostics?.applicationType),
+  );
+  const externalApplyUrl =
+    stringValue(details?.externalApplyUrl) ?? stringValue(externalApplication?.canonicalUrl);
+
+  return {
+    ...review,
+    createdAt: normalizeCreatedAt(row.createdAt),
+    applicationType:
+      explicitApplicationType ?? (externalApplication || externalApplyUrl ? "external" : null),
+    externalApplyUrl,
+  };
+}
+
+function enrichReviewsWithRuntimeSignals(
+  reviews: RunProgressReview[],
+  entries: Array<Record<string, unknown> & { time: number }>,
+): RunProgressReview[] {
+  const externalByUrl = new Map<string, string | null>();
+
+  for (const entry of entries) {
+    const resultStatus = stringValue(entry.resultStatus);
+    const message = stringValue(entry.msg);
+    if (
+      resultStatus !== "stopped_external_apply" &&
+      message !== "Starting LinkedIn external apply handoff." &&
+      message !== "LinkedIn external apply handoff finished."
+    ) {
+      continue;
+    }
+
+    const jobUrl = normalizeJobUrl(stringValue(entry.jobUrl) ?? stringValue(entry.url));
+    if (!jobUrl) {
+      continue;
+    }
+
+    externalByUrl.set(
+      jobUrl,
+      stringValue(entry.externalApplyUrl) ?? stringValue(entry.canonicalUrl),
+    );
+  }
+
+  return reviews.map((review) => {
+    const signal = externalByUrl.get(normalizeJobUrl(review.jobUrl) ?? review.jobUrl);
+    if (signal === undefined) {
+      return review;
+    }
+
+    return {
+      ...review,
+      applicationType: "external",
+      externalApplyUrl: signal ?? review.externalApplyUrl ?? null,
+    };
+  });
+}
+
+function parseJsonObject(value: string | null): Record<string, unknown> | null {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return objectValue(JSON.parse(value));
+  } catch {
+    return null;
+  }
+}
+
+function objectValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? value as Record<string, unknown> : null;
+}
+
+function normalizeApplicationType(value: string | null): "easy_apply" | "external" | null {
+  const normalized = value?.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (normalized === "easy_apply") {
+    return "easy_apply";
+  }
+  if (normalized === "external" || normalized === "external_apply") {
+    return "external";
+  }
+  return null;
+}
+
 function inferCurrentActivity(args: {
   startedAtMs: number;
+  entries: Array<Record<string, unknown> & { time: number }>;
   reviews: RunProgressReview[];
 }): RunCurrentActivity | null {
   if (!Number.isFinite(args.startedAtMs)) {
@@ -178,7 +466,7 @@ function inferCurrentActivity(args: {
     location: null,
   };
 
-  for (const entry of readRecentLogEntries(args.startedAtMs)) {
+  for (const entry of args.entries) {
     const updatedAt = new Date(entry.time).toISOString();
     const event = stringValue(entry.event);
     const message = stringValue(entry.msg);
@@ -302,7 +590,11 @@ function inferCurrentActivity(args: {
   return activity;
 }
 
-function readRecentLogEntries(startedAtMs: number): Array<Record<string, unknown> & { time: number }> {
+function readRecentLogEntries(
+  startedAtMs: number,
+  finishedAtMs: number | null,
+  runId?: string,
+): Array<Record<string, unknown> & { time: number }> {
   const logPath = getEngineLogPath();
   const maxBytes = 512 * 1024;
   let content = "";
@@ -335,7 +627,10 @@ function readRecentLogEntries(startedAtMs: number): Array<Record<string, unknown
       }
     })
     .filter((entry): entry is Record<string, unknown> & { time: number } => {
-      return typeof entry?.time === "number" && entry.time >= startedAtMs;
+      return typeof entry?.time === "number"
+        && entry.time >= startedAtMs
+        && (finishedAtMs === null || entry.time <= finishedAtMs)
+        && (!runId || entry.dashboardRunId === runId);
     })
     .sort((left, right) => left.time - right.time);
 }
@@ -389,19 +684,26 @@ function nestedErrorMessage(entry: Record<string, unknown>): string | null {
   return stringValue((error as Record<string, unknown>).message);
 }
 
-function readLatestRunArtifact(startedAt: string): RunProgressSummary["latestArtifact"] {
+function readLatestRunArtifact(
+  startedAt: string,
+  finishedAt?: string | null,
+  runId?: string,
+): RunProgressSummary["latestArtifact"] {
   const batchDir = path.join(getEngineArtifactsPath(), "batch-runs");
   const startedAtMs = Date.parse(startedAt);
+  const finishedAtMs = finishedAt ? Date.parse(finishedAt) : null;
 
   try {
     const candidates = readdirSync(batchDir)
       .filter((name) => name.endsWith(".json"))
+      .filter((name) => !runId || name.includes(`-${runId}-`))
       .map((name) => {
         const fullPath = path.join(batchDir, name);
         const stat = statSync(fullPath);
         return { name, fullPath, stat };
       })
       .filter((entry) => entry.stat.mtimeMs >= startedAtMs)
+      .filter((entry) => finishedAtMs === null || !Number.isFinite(finishedAtMs) || entry.stat.mtimeMs <= finishedAtMs)
       .sort((left, right) => right.stat.mtimeMs - left.stat.mtimeMs);
 
     const latest = candidates[0];

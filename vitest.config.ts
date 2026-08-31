@@ -10,6 +10,20 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],
+      reportsDirectory: ".runtime/coverage",
+      include: [
+        "middleware.ts",
+        "next.config.ts",
+        "app/api/**/*.ts",
+        "lib/**/*.ts",
+        "src/components/**/*.tsx",
+      ],
+      thresholds: {
+        statements: 75,
+        branches: 65,
+        functions: 75,
+        lines: 75,
+      },
     },
   },
   resolve: {

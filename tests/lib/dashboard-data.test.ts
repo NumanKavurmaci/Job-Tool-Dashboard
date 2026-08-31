@@ -20,6 +20,7 @@ vi.mock("@/lib/engine-db", () => ({
   })),
   readRecentFirms: vi.fn(() => [{ id: "firm-1", name: "Acme" }]),
   readRecommendations: vi.fn(() => [{ id: "recommendation-1", score: 88 }]),
+  readAppliedJobs: vi.fn(() => [{ id: "applied-1", status: "SUBMITTED" }]),
   readRecentDecisions: vi.fn(() => [{ id: "decision-1", decision: "SKIP" }]),
   readPreparedAnswerSets: vi.fn(() => [{ id: "prepared-1" }]),
   readAnswerCache: vi.fn(() => [{ id: "cache-1" }]),
@@ -41,6 +42,7 @@ describe("dashboard data", () => {
     expect(data.stats.totalJobs).toBe(10);
     expect(data.firms[0]).toMatchObject({ id: "firm-1", name: "Acme" });
     expect(data.recommendations[0]).toMatchObject({ id: "recommendation-1", score: 88 });
+    expect(data.appliedJobs[0]).toMatchObject({ id: "applied-1", status: "SUBMITTED" });
     expect(data.decisions[0]).toMatchObject({ id: "decision-1", decision: "SKIP" });
     expect(data.preparedAnswerSets[0]).toMatchObject({ id: "prepared-1" });
     expect(data.answerCache[0]).toMatchObject({ id: "cache-1" });

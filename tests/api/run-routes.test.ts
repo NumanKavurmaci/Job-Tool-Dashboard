@@ -1,22 +1,98 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getCurrentRunMock, readEngineConfigStatusMock, startEngineRunMock, stopCurrentRunMock } = vi.hoisted(() => ({
-  getCurrentRunMock: vi.fn(),
-  readEngineConfigStatusMock: vi.fn(),
-  startEngineRunMock: vi.fn(),
-  stopCurrentRunMock: vi.fn(),
-}));
+const runnerMocks = vi.hoisted(() => {
+  class RunCapacityError extends Error {
+    readonly code = "RUN_CAPACITY_FULL";
+    readonly maxActive: number;
+
+    constructor(maxActive = 2) {
+      super(`At most ${maxActive} engine runs can be active at once.`);
+      this.maxActive = maxActive;
+    }
+  }
+
+  class RunResourceConflictError extends Error {
+    readonly code = "RUN_RESOURCE_CONFLICT";
+    readonly resources: string[];
+
+    constructor(resources: string[]) {
+      super(`Another active run is using: ${resources.join(", ")}.`);
+      this.resources = resources;
+    }
+  }
+
+  class RunNotFoundError extends Error {
+    readonly code = "RUN_NOT_FOUND";
+    readonly runId: string;
+
+    constructor(runId: string) {
+      super("Engine run was not found.");
+      this.runId = runId;
+    }
+  }
+
+  class RunIdRequiredError extends Error {
+    readonly code = "RUN_ID_REQUIRED";
+
+    constructor() {
+      super("A run id is required when more than one engine run is active.");
+    }
+  }
+
+  return {
+    getCurrentRunMock: vi.fn(),
+    getRunMock: vi.fn(),
+    getRunRegistryStateMock: vi.fn(),
+    readLatestJobOutcomesMock: vi.fn(),
+    readEngineConfigStatusMock: vi.fn(),
+    startEngineRunMock: vi.fn(),
+    stopCurrentRunMock: vi.fn(),
+    stopEngineRunMock: vi.fn(),
+    RunCapacityError,
+    RunResourceConflictError,
+    RunNotFoundError,
+    RunIdRequiredError,
+  };
+});
+
+const {
+  getCurrentRunMock,
+  getRunMock,
+  getRunRegistryStateMock,
+  readLatestJobOutcomesMock,
+  readEngineConfigStatusMock,
+  startEngineRunMock,
+  stopCurrentRunMock,
+  stopEngineRunMock,
+  RunCapacityError,
+  RunResourceConflictError,
+  RunNotFoundError,
+  RunIdRequiredError,
+} = runnerMocks;
 
 vi.mock("@/lib/engine-runner", () => ({
-  getCurrentRun: getCurrentRunMock,
-  startEngineRun: startEngineRunMock,
-  stopCurrentRun: stopCurrentRunMock,
+  getCurrentRun: runnerMocks.getCurrentRunMock,
+  getRun: runnerMocks.getRunMock,
+  getRunRegistryState: runnerMocks.getRunRegistryStateMock,
+  startEngineRun: runnerMocks.startEngineRunMock,
+  stopCurrentRun: runnerMocks.stopCurrentRunMock,
+  stopEngineRun: runnerMocks.stopEngineRunMock,
+  RunCapacityError: runnerMocks.RunCapacityError,
+  RunResourceConflictError: runnerMocks.RunResourceConflictError,
+  RunNotFoundError: runnerMocks.RunNotFoundError,
+  RunIdRequiredError: runnerMocks.RunIdRequiredError,
 }));
 
 vi.mock("@/lib/engine-status", () => ({
-  readEngineConfigStatus: readEngineConfigStatusMock,
+  readEngineConfigStatus: runnerMocks.readEngineConfigStatusMock,
 }));
 
+vi.mock("@/lib/run-progress", () => ({
+  readLatestJobOutcomes: runnerMocks.readLatestJobOutcomesMock,
+}));
+
+import { GET as getCurrentRuns } from "@/app/api/run/current/route";
+import { POST as stopRunById } from "@/app/api/run/[id]/stop/route";
 import { POST as startRun } from "@/app/api/run/start/route";
 import { POST as stopRun } from "@/app/api/run/stop/route";
 
@@ -42,15 +118,29 @@ function requestFor(path: string, body?: unknown, origin = "http://127.0.0.1:300
   });
 }
 
+function runContext(id: string) {
+  return { params: Promise.resolve({ id }) };
+}
+
 describe("run API routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     readEngineConfigStatusMock.mockResolvedValue({ checks: readyChecks, ready: true });
     startEngineRunMock.mockImplementation((args: string[]) => ({ id: "run-1", args, status: "running" }));
     getCurrentRunMock.mockReturnValue(null);
+    getRunMock.mockReturnValue(null);
+    getRunRegistryStateMock.mockReturnValue({
+      runs: [],
+      activeCount: 0,
+      maxActive: 2,
+      available: 2,
+    });
+    readLatestJobOutcomesMock.mockReturnValue([]);
+    stopCurrentRunMock.mockReturnValue(null);
+    stopEngineRunMock.mockReturnValue(null);
   });
 
-  it("defaults an API-started apply run to dry-run", async () => {
+  it("defaults an API-started apply run to live mode", async () => {
     const response = await startRun(
       requestFor("/api/run/start", {
         type: "easy-apply",
@@ -63,15 +153,14 @@ describe("run API routes", () => {
     expect(startEngineRunMock).toHaveBeenCalledWith([
       "easy-apply",
       "https://www.linkedin.com/jobs/view/123/",
-      "--dry-run",
     ]);
   });
 
-  it("uses the live path only when the existing dry-run toggle sends false", async () => {
+  it("uses the dry-run path only when the toggle sends true", async () => {
     const response = await startRun(
       requestFor("/api/run/start", {
         type: "easy-apply",
-        values: { url: "https://www.linkedin.com/jobs/view/123/", dryRun: false },
+        values: { url: "https://www.linkedin.com/jobs/view/123/", dryRun: true },
       }),
     );
 
@@ -79,6 +168,7 @@ describe("run API routes", () => {
     expect(startEngineRunMock).toHaveBeenCalledWith([
       "easy-apply",
       "https://www.linkedin.com/jobs/view/123/",
+      "--dry-run",
     ]);
   });
 
@@ -113,6 +203,44 @@ describe("run API routes", () => {
     expect(startEngineRunMock).not.toHaveBeenCalled();
   });
 
+  it("rejects an oversized UTF-8 body even without a Content-Length header", async () => {
+    const response = await startRun(
+      new Request("http://127.0.0.1:3000/api/run/start", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: "http://127.0.0.1:3000",
+          "Sec-Fetch-Site": "same-origin",
+        },
+        body: JSON.stringify({ padding: "🙂".repeat(9_000) }),
+      }),
+    );
+
+    expect(response.status).toBe(413);
+    await expect(response.json()).resolves.toEqual({ error: "Run request is too large." });
+    expect(startEngineRunMock).not.toHaveBeenCalled();
+  });
+
+  it.each(["", "{not-json", "null"])(
+    "returns a no-store 400 for an invalid JSON body: %j",
+    async (body) => {
+      const response = await startRun(
+        new Request("http://127.0.0.1:3000/api/run/start", {
+          method: "POST",
+          headers: {
+            Origin: "http://127.0.0.1:3000",
+            "Sec-Fetch-Site": "same-origin",
+          },
+          body,
+        }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(response.headers.get("cache-control")).toContain("no-store");
+      expect(startEngineRunMock).not.toHaveBeenCalled();
+    },
+  );
+
   it("rejects unknown run types, invalid provider URLs, and out-of-range numbers", async () => {
     const unknownType = await startRun(
       requestFor("/api/run/start", { type: "shell", values: {} }),
@@ -128,7 +256,7 @@ describe("run API routes", () => {
         type: "explore-batch",
         values: {
           url: "https://www.linkedin.com/jobs/collections/easy-apply",
-          count: 101,
+          count: 1001,
         },
       }),
     );
@@ -173,22 +301,21 @@ describe("run API routes", () => {
     expect(startEngineRunMock).toHaveBeenCalledWith([
       "apply-batch",
       "https://jobs.ashbyhq.com/example",
-      "--dry-run",
     ]);
   });
 
   it("accepts canonical Kariyer listing batches in dry-run and live modes", async () => {
     const url = "https://www.kariyer.net/is-ilanlari/yazilim-gelistirme?sort=date";
-    const dryRun = await startRun(
+    const live = await startRun(
       requestFor("/api/run/start", {
         type: "apply-batch",
         values: { url, count: 4 },
       }),
     );
-    const live = await startRun(
+    const dryRun = await startRun(
       requestFor("/api/run/start", {
         type: "apply-batch",
-        values: { url, count: 4, dryRun: false },
+        values: { url, count: 4, dryRun: true },
       }),
     );
 
@@ -199,13 +326,13 @@ describe("run API routes", () => {
       url,
       "--count",
       "4",
-      "--dry-run",
     ]);
     expect(startEngineRunMock).toHaveBeenNthCalledWith(2, [
       "apply-batch",
       url,
       "--count",
       "4",
+      "--dry-run",
     ]);
   });
 
@@ -286,13 +413,252 @@ describe("run API routes", () => {
     expect(startEngineRunMock).not.toHaveBeenCalled();
   });
 
-  it("guards stop mutations and marks their responses no-store", async () => {
+  it("returns the started run together with the authoritative registry state", async () => {
+    const run = { id: "run-9", status: "running" };
+    const state = {
+      runs: [run],
+      activeCount: 1,
+      maxActive: 2,
+      available: 1,
+    };
+    startEngineRunMock.mockReturnValue(run);
+    getRunRegistryStateMock.mockReturnValue(state);
+
+    const response = await startRun(
+      requestFor("/api/run/start", {
+        type: "score",
+        values: { url: "https://jobs.example.com/job/9" },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ run, ...state });
+  });
+
+  it("returns a no-store 500 when readiness inspection fails", async () => {
+    readEngineConfigStatusMock.mockRejectedValue(new Error("status unavailable"));
+
+    const response = await startRun(
+      requestFor("/api/run/start", {
+        type: "score",
+        values: { url: "https://jobs.example.com/job/1" },
+      }),
+    );
+
+    expect(response.status).toBe(500);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    await expect(response.json()).resolves.toMatchObject({ error: "status unavailable" });
+    expect(startEngineRunMock).not.toHaveBeenCalled();
+  });
+
+  it("uses a safe generic 500 message for a non-Error runner failure", async () => {
+    startEngineRunMock.mockImplementation(() => {
+      throw "runner failed";
+    });
+
+    const response = await startRun(
+      requestFor("/api/run/start", {
+        type: "score",
+        values: { url: "https://jobs.example.com/job/1" },
+      }),
+    );
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({ error: "Failed to start run." });
+  });
+
+  it("keeps the current-run alias while adding the two-run registry state", async () => {
+    const primary = { id: "run-1", status: "running" };
+    const secondary = { id: "run-2", status: "running" };
+    getCurrentRunMock.mockReturnValue(primary);
+    getRunRegistryStateMock.mockReturnValue({
+      runs: [secondary, primary],
+      activeCount: 2,
+      maxActive: 2,
+      available: 0,
+    });
+
+    const response = await getCurrentRuns();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    await expect(response.json()).resolves.toEqual({
+      run: primary,
+      runs: [secondary, primary],
+      activeCount: 2,
+      maxActive: 2,
+      available: 0,
+      latestOutcomes: [],
+    });
+  });
+
+  it("returns a typed 409 when the run registry is at capacity", async () => {
+    startEngineRunMock.mockImplementation(() => {
+      throw new RunCapacityError(2);
+    });
+
+    const response = await startRun(
+      requestFor("/api/run/start", {
+        type: "score",
+        values: { url: "https://example.com/jobs/123" },
+      }),
+    );
+
+    expect(response.status).toBe(409);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    await expect(response.json()).resolves.toMatchObject({
+      code: "RUN_CAPACITY_FULL",
+      maxActive: 2,
+    });
+  });
+
+  it("returns a typed 409 with the conflicting exclusive resources", async () => {
+    startEngineRunMock.mockImplementation(() => {
+      throw new RunResourceConflictError(["profile:linkedin"]);
+    });
+
+    const response = await startRun(
+      requestFor("/api/run/start", {
+        type: "easy-apply",
+        values: { url: "https://www.linkedin.com/jobs/view/123/" },
+      }),
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "RUN_RESOURCE_CONFLICT",
+      conflicts: ["profile:linkedin"],
+    });
+  });
+
+  it("guards the legacy stop mutation and preserves its no-id fallback", async () => {
     const blocked = await stopRun(requestFor("/api/run/stop", undefined, "https://attacker.example"));
     const allowed = await stopRun(requestFor("/api/run/stop"));
 
     expect(blocked.status).toBe(403);
     expect(allowed.status).toBe(200);
     expect(allowed.headers.get("cache-control")).toContain("no-store");
-    expect(stopCurrentRunMock).toHaveBeenCalledTimes(1);
+    expect(stopCurrentRunMock).toHaveBeenCalledOnce();
+    expect(stopCurrentRunMock).toHaveBeenCalledWith(undefined);
+  });
+
+  it("lets the legacy stop route target an optional run id", async () => {
+    const response = await stopRun(requestFor("/api/run/stop", { runId: " run-2 " }));
+
+    expect(response.status).toBe(200);
+    expect(stopCurrentRunMock).toHaveBeenCalledWith("run-2");
+  });
+
+  it("treats a non-string or blank legacy run id as omitted", async () => {
+    const numeric = await stopRun(requestFor("/api/run/stop", { runId: 42 }));
+    const blank = await stopRun(requestFor("/api/run/stop", { runId: "   " }));
+
+    expect(numeric.status).toBe(200);
+    expect(blank.status).toBe(200);
+    expect(stopCurrentRunMock).toHaveBeenNthCalledWith(1, undefined);
+    expect(stopCurrentRunMock).toHaveBeenNthCalledWith(2, undefined);
+  });
+
+  it("returns 400 and does not stop a run when the legacy body is invalid JSON", async () => {
+    const response = await stopRun(
+      new Request("http://127.0.0.1:3000/api/run/stop", {
+        method: "POST",
+        headers: {
+          Origin: "http://127.0.0.1:3000",
+          "Sec-Fetch-Site": "same-origin",
+        },
+        body: "{invalid",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    expect(stopCurrentRunMock).not.toHaveBeenCalled();
+  });
+
+  it("returns a typed 404 from the legacy stop route", async () => {
+    stopCurrentRunMock.mockImplementation(() => {
+      throw new RunNotFoundError("missing-run");
+    });
+
+    const response = await stopRun(requestFor("/api/run/stop", { runId: "missing-run" }));
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({ code: "RUN_NOT_FOUND" });
+  });
+
+  it("requires a run id when the legacy stop route is ambiguous", async () => {
+    stopCurrentRunMock.mockImplementation(() => {
+      throw new RunIdRequiredError();
+    });
+
+    const response = await stopRun(requestFor("/api/run/stop"));
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "RUN_ID_REQUIRED",
+    });
+  });
+
+  it("stops a specific run through the canonical targeted route", async () => {
+    const run = { id: "run-2", status: "stopping" };
+    stopEngineRunMock.mockReturnValue(run);
+    getRunMock.mockReturnValue(run);
+
+    const response = await stopRunById(
+      requestFor("/api/run/run-2/stop"),
+      runContext("run-2"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    expect(stopEngineRunMock).toHaveBeenCalledWith("run-2");
+    expect(getRunMock).toHaveBeenCalledWith("run-2");
+    await expect(response.json()).resolves.toEqual({ run });
+  });
+
+  it("rejects cross-origin targeted stop requests before touching the runner", async () => {
+    const response = await stopRunById(
+      requestFor("/api/run/run-2/stop", undefined, "https://attacker.example"),
+      runContext("run-2"),
+    );
+
+    expect(response.status).toBe(403);
+    expect(stopEngineRunMock).not.toHaveBeenCalled();
+    expect(getRunMock).not.toHaveBeenCalled();
+  });
+
+  it("returns a typed 404 when the targeted run does not exist", async () => {
+    stopEngineRunMock.mockImplementation(() => {
+      throw new RunNotFoundError("missing-run");
+    });
+
+    const response = await stopRunById(
+      requestFor("/api/run/missing-run/stop"),
+      runContext("missing-run"),
+    );
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    await expect(response.json()).resolves.toMatchObject({
+      code: "RUN_NOT_FOUND",
+    });
+  });
+
+  it("returns a no-store 500 for an unexpected targeted stop failure", async () => {
+    stopEngineRunMock.mockImplementation(() => {
+      throw new Error("process manager unavailable");
+    });
+
+    const response = await stopRunById(
+      requestFor("/api/run/run-2/stop"),
+      runContext("run-2"),
+    );
+
+    expect(response.status).toBe(500);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    await expect(response.json()).resolves.toEqual({
+      error: "process manager unavailable",
+    });
   });
 });

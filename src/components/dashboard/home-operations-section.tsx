@@ -12,18 +12,21 @@ function runTone(status: HomeRun["status"] | undefined) {
   if (status === "failed") return "skip" as const;
   if (status === "stopped") return "warn" as const;
   if (status === "running") return "info" as const;
+  if (status === "stopping") return "warn" as const;
   return "neutral" as const;
 }
 
 export function HomeOperationsSection({
-  currentRun,
+  runs,
   incompleteCount,
   runBlockers,
 }: {
-  currentRun: HomeRun | null;
+  runs: HomeRun[];
   incompleteCount: number;
   runBlockers: EngineStatusCheck[];
 }) {
+  const activeRuns = runs.filter((run) => run.status === "running" || run.status === "stopping");
+  const currentRun = activeRuns[0] ?? runs[0] ?? null;
   const activity = currentRun?.progress?.currentActivity;
 
   return (
@@ -32,7 +35,7 @@ export function HomeOperationsSection({
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <SectionTitle
             eyebrow="Operations"
-            title={currentRun?.status === "running" ? "Engine run in progress" : "Run control"}
+            title={activeRuns.length > 0 ? `${activeRuns.length}/2 engine runs active` : "Run control"}
             subtitle={
               activity?.label ??
               (currentRun
@@ -40,20 +43,22 @@ export function HomeOperationsSection({
                 : "Start with a dry run, monitor progress, and keep the live path explicit.")
             }
           />
-          <Badge tone={runTone(currentRun?.status)}>{currentRun?.status ?? "idle"}</Badge>
+          <Badge tone={activeRuns.length === 2 ? "warn" : runTone(currentRun?.status)}>
+            {activeRuns.length}/2 active
+          </Badge>
         </div>
 
-        {currentRun ? (
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              ["Mode", currentRun.mode],
-              ["Evaluated", currentRun.progress?.evaluatedCount ?? 0],
-              ["Submitted", currentRun.progress?.submittedCount ?? 0],
-              ["Failed", currentRun.progress?.failedCount ?? 0],
-            ].map(([label, value]) => (
-              <div key={label} className="rounded-2xl border border-line bg-black/20 p-3">
-                <p className="text-xs uppercase tracking-[0.18em] text-muted">{label}</p>
-                <p className="mt-2 truncate text-sm font-semibold text-text">{value}</p>
+        {activeRuns.length > 0 ? (
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            {activeRuns.map((run) => (
+              <div key={run.id} className="rounded-2xl border border-line bg-black/20 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="truncate text-sm font-semibold text-text">{run.mode}</p>
+                  <Badge tone={runTone(run.status)}>{run.status}</Badge>
+                </div>
+                <p className="mt-2 truncate text-xs text-muted">
+                  {run.progress?.currentActivity?.label ?? run.id.slice(0, 8)}
+                </p>
               </div>
             ))}
           </div>
@@ -64,7 +69,7 @@ export function HomeOperationsSection({
           className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-blue-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-400"
         >
           <PlayCircle className="size-4" aria-hidden="true" />
-          {currentRun?.status === "running" ? "Open live controls" : "Configure a run"}
+          {activeRuns.length > 0 ? "Open live controls" : "Configure a run"}
         </Link>
       </Card>
 

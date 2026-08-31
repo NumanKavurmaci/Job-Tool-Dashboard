@@ -446,6 +446,42 @@ describe("engine artifacts", () => {
     ]);
   });
 
+  it("keeps direct Kariyer terminal job failures as incomplete outcomes", () => {
+    const reportPath = path.join(tempRoot, "artifacts", "batch-runs", "kariyer-direct-failure.json");
+    fs.writeFileSync(
+      reportPath,
+      JSON.stringify({
+        mode: "apply-batch",
+        dryRun: true,
+        applyBatch: {
+          status: "partial",
+          jobs: [
+            {
+              url: "https://www.kariyer.net/is-ilani/acme-yazilim-gelistirme-uzmani-123",
+              title: "Yazilim Gelistirme Uzmani",
+              company: "Acme",
+              location: "Istanbul",
+              status: "failed",
+              error: "Kariyer.net requires manual security verification.",
+            },
+          ],
+        },
+      }),
+    );
+
+    const artifact = readArtifactById(buildArtifactId("batch-runs", "kariyer-direct-failure.json"));
+
+    expect(artifact?.details?.outcomeJobs?.incomplete).toEqual([
+      expect.objectContaining({
+        url: "https://www.kariyer.net/is-ilani/acme-yazilim-gelistirme-uzmani-123",
+        title: "Yazilim Gelistirme Uzmani",
+        company: "Acme",
+        status: "failed",
+        reason: "Kariyer.net requires manual security verification.",
+      }),
+    ]);
+  });
+
   it("normalizes LinkedIn unknown-action diagnostics", () => {
     const reportPath = path.join(tempRoot, "artifacts", "batch-runs", "unknown-action.json");
     fs.writeFileSync(

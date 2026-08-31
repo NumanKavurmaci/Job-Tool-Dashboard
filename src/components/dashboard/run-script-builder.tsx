@@ -2,6 +2,7 @@
 
 import { AlertTriangle, CheckCircle2, CircleStop, Copy, Play, RefreshCw, Terminal } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { ApplicationTypeBadge } from "@/components/dashboard/application-type-badge";
 import { Badge, Card, SectionTitle } from "@/components/ui";
 import {
   RUN_SCRIPT_DEFINITIONS,
@@ -39,6 +40,8 @@ type RunProgressReview = {
   title: string | null;
   company: string | null;
   location: string | null;
+  applicationType?: "easy_apply" | "external" | null;
+  externalApplyUrl?: string | null;
 };
 
 type CurrentRun = {
@@ -49,7 +52,11 @@ type CurrentRun = {
   cwd: string;
   startedAt: string;
   finishedAt: string | null;
-  status: "running" | "completed" | "failed" | "stopped";
+  executionMode: "dry-run" | "live" | "non-submit";
+  correlationMode: "run-id" | "legacy-time";
+  exclusiveResources: string[];
+  status: "running" | "stopping" | "completed" | "failed" | "stopped";
+  revision: number;
   exitCode: number | null;
   pid: number | null;
   events: Array<{
@@ -64,8 +71,12 @@ type CurrentRun = {
     submittedCount: number;
     failedCount: number;
     applyDecisionCount: number;
+    terminalOutcome: {
+      status: "success" | "partial" | "failed";
+      reason: string | null;
+    } | null;
     currentActivity: {
-      stage: "starting" | "scanning" | "evaluating" | "applying" | "submitted" | "failed" | "completed" | "stopped";
+      stage: "starting" | "scanning" | "evaluating" | "applying" | "submitted" | "partial" | "failed" | "completed" | "stopping" | "stopped";
       label: string;
       detail: string | null;
       jobUrl: string | null;
@@ -86,12 +97,33 @@ type CurrentRun = {
   } | null;
 };
 
-function statusTone(status: CurrentRun["status"] | undefined) {
+type RunDisplayStatus = CurrentRun["status"] | "partial";
+type RunActivityStage = NonNullable<NonNullable<CurrentRun["progress"]>["currentActivity"]>["stage"];
+
+function statusTone(status: RunDisplayStatus | undefined) {
   if (status === "running") return "info" as const;
+  if (status === "stopping" || status === "partial") return "warn" as const;
   if (status === "completed") return "apply" as const;
   if (status === "failed") return "skip" as const;
   if (status === "stopped") return "warn" as const;
   return "neutral" as const;
+}
+
+function displayStatus(run: CurrentRun | null | undefined): RunDisplayStatus | undefined {
+  if (run?.status === "completed" && run.progress?.terminalOutcome?.status === "partial") {
+    return "partial";
+  }
+  if (run?.status === "completed" && run.progress?.terminalOutcome?.status === "failed") {
+    return "failed";
+  }
+  return run?.status;
+}
+
+function activityTone(stage: RunActivityStage) {
+  if (stage === "partial" || stage === "stopping" || stage === "stopped") return "warn" as const;
+  if (stage === "failed") return "skip" as const;
+  if (stage === "completed" || stage === "submitted") return "apply" as const;
+  return "info" as const;
 }
 
 function outcomeTone(review: RunProgressReview) {
@@ -99,6 +131,12 @@ function outcomeTone(review: RunProgressReview) {
   if (review.status === "FAILED") return "skip" as const;
   if (review.status.startsWith("SKIPPED")) return "warn" as const;
   if (review.decision === "APPLY") return "info" as const;
+  return "neutral" as const;
+}
+
+function executionTone(mode: CurrentRun["executionMode"]) {
+  if (mode === "live") return "skip" as const;
+  if (mode === "dry-run") return "info" as const;
   return "neutral" as const;
 }
 
@@ -191,16 +229,78 @@ function FieldInput({
   );
 }
 
+export function JobOutcome({
+  review,
+  executionMode,
+  runStatus,
+}: {
+  review: RunProgressReview;
+  executionMode?: CurrentRun["executionMode"];
+  runStatus?: CurrentRun["status"];
+}) {
+  const liveApplyEvaluation = executionMode === "live" && review.status === "EVALUATED" && review.decision === "APPLY";
+  const runFinished = runStatus === "completed" || runStatus === "failed" || runStatus === "stopped";
+  const externalApply = review.applicationType === "external";
+  const applicationState = !externalApply && review.status === "FAILED" && review.decision === "APPLY"
+    ? "NOT SUBMITTED"
+    : !externalApply && liveApplyEvaluation
+      ? runFinished
+        ? "NOT SUBMITTED"
+        : "SUBMISSION PENDING"
+      : null;
+  const externalApplyMessage = externalApply && review.decision === "APPLY" && review.status !== "SUBMITTED"
+    ? runFinished
+      ? "This job uses an external application form. The run ended before submission was confirmed."
+      : "This job continues on an external application form. Submission has not been confirmed yet."
+    : null;
+
+  return (
+    <div className="rounded-2xl border border-line bg-black/20 p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge tone={outcomeTone(review)}>{review.status}</Badge>
+        <ApplicationTypeBadge value={review.applicationType} />
+        {applicationState ? (
+          <Badge tone={applicationState === "NOT SUBMITTED" ? "skip" : "warn"}>{applicationState}</Badge>
+        ) : null}
+        {review.score != null ? <Badge tone="neutral">Score {review.score}</Badge> : null}
+        {review.decision ? <Badge tone={review.decision === "APPLY" ? "info" : "warn"}>{review.decision}</Badge> : null}
+      </div>
+      <a
+        className="mt-3 inline-block text-sm font-semibold text-text transition hover:text-blue-300 hover:underline"
+        href={review.jobUrl}
+        rel="noreferrer"
+        target="_blank"
+      >
+        {review.title ?? "Unknown role"}
+        {review.company ? ` at ${review.company}` : ""}
+      </a>
+      <p className="mt-1 text-xs text-muted">{review.summary ?? review.jobUrl}</p>
+      {applicationState ? (
+        <p className="mt-2 text-xs font-medium text-amber-200">
+          {applicationState === "NOT SUBMITTED"
+            ? "The APPLY decision did not produce a confirmed submission."
+            : "The job passed scoring, but submission has not been confirmed yet."}
+        </p>
+      ) : null}
+      {externalApplyMessage ? (
+        <p className="mt-2 text-xs font-medium text-violet-200">{externalApplyMessage}</p>
+      ) : null}
+    </div>
+  );
+}
+
 export function RunScriptBuilder() {
   const [scriptType, setScriptType] = useState<RunScriptType>("apply-batch");
   const [values, setValues] = useState<RunFormValues>(() => buildInitialValues("apply-batch"));
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [status, setStatus] = useState<ConfigStatus | null>(null);
-  const [currentRun, setCurrentRun] = useState<CurrentRun | null>(null);
+  const [runs, setRuns] = useState<CurrentRun[]>([]);
+  const [latestOutcomes, setLatestOutcomes] = useState<RunProgressReview[]>([]);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
-  const [isStopping, setIsStopping] = useState(false);
+  const [stoppingRunIds, setStoppingRunIds] = useState<string[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
 
@@ -221,6 +321,31 @@ export function RunScriptBuilder() {
   );
   const readinessPending = status === null;
   const runIsBlocked = readinessPending || blockingChecks.length > 0;
+  const activeRuns = useMemo(
+    () => runs.filter((run) => run.status === "running" || run.status === "stopping"),
+    [runs],
+  );
+  const currentRun = runs.find((run) => run.id === selectedRunId) ?? runs[0] ?? null;
+  const unconfirmedApplyCount = useMemo(() => {
+    if (
+      currentRun?.executionMode !== "live"
+      || !["completed", "failed", "stopped"].includes(currentRun.status)
+    ) {
+      return 0;
+    }
+
+    return (currentRun.progress?.reviews ?? []).filter(
+      (review) => review.status === "EVALUATED" && review.decision === "APPLY",
+    ).length;
+  }, [currentRun]);
+  const visibleRuns = useMemo(() => {
+    const prioritized = [...activeRuns, ...runs.filter((run) => !activeRuns.some((active) => active.id === run.id))];
+    return prioritized.slice(0, 4);
+  }, [activeRuns, runs]);
+  const activeRunKey = activeRuns.map((run) => `${run.id}:${run.status}`).join("|");
+  const displayedOutcomes = currentRun
+    ? [...(currentRun.progress?.reviews ?? [])].slice(-8).reverse()
+    : latestOutcomes.slice(0, 8);
 
   const generated = useMemo(() => {
     try {
@@ -249,8 +374,17 @@ export function RunScriptBuilder() {
   async function refreshCurrentRun() {
     const response = await fetch("/api/run/current", { cache: "no-store" });
     if (response.ok) {
-      const payload = (await response.json()) as { run: CurrentRun | null };
-      setCurrentRun(payload.run);
+      const payload = (await response.json()) as {
+        run: CurrentRun | null;
+        runs?: CurrentRun[];
+        latestOutcomes?: RunProgressReview[];
+      };
+      const nextRuns = payload.runs ?? (payload.run ? [payload.run] : []);
+      setRuns(nextRuns);
+      setLatestOutcomes(payload.latestOutcomes ?? []);
+      setSelectedRunId((current) =>
+        current && nextRuns.some((run) => run.id === current) ? current : nextRuns[0]?.id ?? null,
+      );
       setLastSyncedAt(new Date().toLocaleTimeString());
     }
   }
@@ -264,26 +398,37 @@ export function RunScriptBuilder() {
     const interval = window.setInterval(() => {
       void refreshStatus();
       void refreshCurrentRun();
-    }, currentRun?.status === "running" ? 1000 : 4000);
+    }, activeRuns.length > 0 ? 1000 : 4000);
 
     return () => window.clearInterval(interval);
-  }, [currentRun?.status]);
+  }, [activeRuns.length]);
 
   useEffect(() => {
-    if (!currentRun?.id || currentRun.status !== "running") {
-      return;
-    }
+    if (activeRuns.length === 0) return;
+    let refreshTimer: number | null = null;
+    const refresh = () => {
+      if (refreshTimer) return;
+      refreshTimer = window.setTimeout(() => {
+        refreshTimer = null;
+        void refreshCurrentRun();
+      }, 300);
+    };
+    const sources = activeRuns.map((run) => {
+      const source = new EventSource(`/api/run/${run.id}/events`);
+      source.addEventListener("stdout", refresh);
+      source.addEventListener("stderr", refresh);
+      source.addEventListener("run_stop_requested", refresh);
+      source.addEventListener("run_finished", refresh);
+      source.addEventListener("run_failed", refresh);
+      source.addEventListener("run_stopped", refresh);
+      return source;
+    });
 
-    const source = new EventSource(`/api/run/${currentRun.id}/events`);
-    const refresh = () => void refreshCurrentRun();
-    source.addEventListener("stdout", refresh);
-    source.addEventListener("stderr", refresh);
-    source.addEventListener("run_finished", refresh);
-    source.addEventListener("run_failed", refresh);
-    source.addEventListener("run_stopped", refresh);
-
-    return () => source.close();
-  }, [currentRun?.id, currentRun?.status]);
+    return () => {
+      if (refreshTimer) window.clearTimeout(refreshTimer);
+      sources.forEach((source) => source.close());
+    };
+  }, [activeRunKey]);
 
   async function copyScript() {
     if (!generated.script) {
@@ -323,11 +468,12 @@ export function RunScriptBuilder() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: scriptType, values }),
       });
-      const payload = (await response.json()) as { run?: CurrentRun; error?: string };
+      const payload = (await response.json()) as { run?: CurrentRun; runs?: CurrentRun[]; error?: string };
       if (!response.ok || !payload.run) {
         throw new Error(payload.error ?? "Failed to start run.");
       }
-      setCurrentRun(payload.run);
+      setRuns(payload.runs ?? [payload.run]);
+      setSelectedRunId(payload.run.id);
     } catch (error) {
       setRunError(error instanceof Error ? error.message : "Failed to start run.");
     } finally {
@@ -335,23 +481,25 @@ export function RunScriptBuilder() {
     }
   }
 
-  async function stopRun() {
+  async function stopRun(runId: string) {
     setRunError(null);
-    setIsStopping(true);
+    setStoppingRunIds((current) => current.includes(runId) ? current : [...current, runId]);
     try {
-      const response = await fetch("/api/run/stop", { method: "POST" });
+      const response = await fetch(`/api/run/${runId}/stop`, { method: "POST" });
       const payload = (await response.json()) as { run?: CurrentRun | null; error?: string };
       if (!response.ok) {
         throw new Error(payload.error ?? "Failed to stop run.");
       }
-      setCurrentRun(payload.run ?? null);
+      if (payload.run) {
+        setRuns((current) => current.map((run) => run.id === payload.run?.id ? payload.run : run));
+      }
       window.setTimeout(() => {
         void refreshCurrentRun();
       }, 500);
     } catch (error) {
       setRunError(error instanceof Error ? error.message : "Failed to stop run.");
     } finally {
-      setIsStopping(false);
+      setStoppingRunIds((current) => current.filter((id) => id !== runId));
     }
   }
 
@@ -492,15 +640,58 @@ export function RunScriptBuilder() {
           <SectionTitle
             eyebrow="Control"
             title="Run from dashboard"
-            subtitle="The dashboard starts the engine in the sibling Job Tool folder and follows the database, logs, and artifacts it creates."
+            subtitle={`Two isolated slots are available. ${activeRuns.length}/2 are active; each run has its own process, progress, and stop control.`}
           />
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            {visibleRuns.map((run) => {
+              const active = run.status === "running" || run.status === "stopping";
+              const selected = run.id === currentRun?.id;
+              const runStatus = displayStatus(run);
+              return (
+                <div
+                  key={run.id}
+                  className={`rounded-2xl border p-4 transition ${selected ? "border-blue-400 bg-blue-400/10" : "border-line bg-black/20 hover:border-slate-500"}`}
+                >
+                  <button className="block w-full text-left" type="button" onClick={() => setSelectedRunId(run.id)}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge tone={statusTone(runStatus)}>{runStatus}</Badge>
+                      <Badge tone={executionTone(run.executionMode)}>{run.executionMode.toUpperCase()}</Badge>
+                      <Badge tone="neutral">{run.id.slice(0, 8)}</Badge>
+                    </div>
+                    <p className="mt-3 truncate text-sm font-semibold text-text">{run.mode}</p>
+                    <p className="mt-1 truncate text-xs text-muted">
+                      {run.progress?.currentActivity?.label ?? run.command}
+                    </p>
+                  </button>
+                  {active ? (
+                    <button
+                      aria-label={`Stop ${run.id} run`}
+                      className="mt-3 inline-flex items-center gap-2 rounded-xl border border-line px-3 py-2 text-xs font-semibold text-text"
+                      disabled={stoppingRunIds.includes(run.id) || run.status === "stopping"}
+                      type="button"
+                      onClick={() => void stopRun(run.id)}
+                    >
+                      <CircleStop className="size-4" aria-hidden="true" />
+                      {stoppingRunIds.includes(run.id) || run.status === "stopping" ? "Stopping" : "Stop this run"}
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })}
+            {visibleRuns.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-line bg-black/10 p-4 text-sm text-muted">
+                Both run slots are available.
+              </div>
+            ) : null}
+          </div>
 
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             {[
               ["Evaluated", currentRun?.progress?.evaluatedCount ?? 0],
               ["Apply", currentRun?.progress?.applyDecisionCount ?? 0],
               ["Submitted", currentRun?.progress?.submittedCount ?? 0],
-              ["Failed", currentRun?.progress?.failedCount ?? 0],
+              ["Failed", (currentRun?.progress?.failedCount ?? 0) + unconfirmedApplyCount],
             ].map(([label, value]) => (
               <div key={label} className="rounded-2xl border border-line bg-black/20 p-4">
                 <p className="text-xs uppercase tracking-[0.2em] text-muted">{label}</p>
@@ -510,24 +701,24 @@ export function RunScriptBuilder() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Badge tone={statusTone(currentRun?.status)}>
-              {currentRun ? currentRun.status : "idle"}
+            <Badge tone={statusTone(displayStatus(currentRun))}>
+              {currentRun ? displayStatus(currentRun) : "idle"}
             </Badge>
             {currentRun?.progress?.latestArtifact ? (
               <Badge tone="apply">Artifact ready</Badge>
             ) : null}
-            {liveApplyEnabled ? (
-              <Badge tone="skip">LIVE APPLY</Badge>
-            ) : (
-              <Badge tone="info">Dry or non-submit</Badge>
-            )}
+            {currentRun ? (
+              <Badge tone={executionTone(currentRun.executionMode)}>{currentRun.executionMode.toUpperCase()}</Badge>
+            ) : null}
             {lastSyncedAt ? <Badge tone="neutral">Updated {lastSyncedAt}</Badge> : null}
           </div>
 
           {currentRun?.progress?.currentActivity ? (
             <div className="rounded-2xl border border-blue-400/25 bg-blue-400/10 p-4">
               <div className="flex flex-wrap items-center gap-2">
-                <Badge tone="info">{currentRun.progress.currentActivity.stage}</Badge>
+                <Badge tone={activityTone(currentRun.progress.currentActivity.stage)}>
+                  {currentRun.progress.currentActivity.stage}
+                </Badge>
                 {currentRun.progress.currentActivity.score != null ? (
                   <Badge tone="neutral">Score {currentRun.progress.currentActivity.score}</Badge>
                 ) : null}
@@ -558,21 +749,12 @@ export function RunScriptBuilder() {
           <div className="flex flex-wrap gap-3">
             <button
               className="inline-flex items-center gap-2 rounded-2xl bg-blue-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={Boolean(generated.error) || runIsBlocked || isStarting || currentRun?.status === "running"}
+              disabled={Boolean(generated.error) || runIsBlocked || isStarting || activeRuns.length >= 2}
               type="button"
               onClick={startRun}
             >
               <Play className="size-4" aria-hidden="true" />
               {isStarting ? "Starting" : liveApplyEnabled ? "Start LIVE Run" : "Start Run"}
-            </button>
-            <button
-              className="inline-flex items-center gap-2 rounded-2xl border border-line bg-black/20 px-4 py-3 text-sm font-semibold text-text transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={currentRun?.status !== "running" || isStopping}
-              type="button"
-              onClick={stopRun}
-            >
-              <CircleStop className="size-4" aria-hidden="true" />
-              {isStopping ? "Stopping" : "Stop"}
             </button>
             <button
               className="inline-flex items-center gap-2 rounded-2xl border border-line bg-black/20 px-4 py-3 text-sm font-semibold text-text transition hover:border-slate-500"
@@ -597,6 +779,36 @@ export function RunScriptBuilder() {
               <p className="mt-2 break-all font-mono text-xs text-slate-200">{generated.preview}</p>
             </div>
           )}
+        </Card>
+
+        <Card className="space-y-3">
+          <SectionTitle
+            eyebrow="Progress"
+            title="Latest job outcomes"
+            subtitle={currentRun
+              ? "Rows appear from review history or the selected run artifact."
+              : "Showing the latest persisted outcomes even after the dashboard process restarts."}
+          />
+          <div className="space-y-3">
+            {displayedOutcomes.map((review) => (
+              <JobOutcome
+                key={`${review.createdAt}-${review.jobUrl}-${review.status}`}
+                executionMode={currentRun?.executionMode}
+                review={review}
+                runStatus={currentRun?.status}
+              />
+            ))}
+            {currentRun && (currentRun.progress?.reviews.length ?? 0) === 0 ? (
+              <div className="rounded-2xl border border-line bg-black/20 p-4 text-sm text-muted">
+                Waiting for the first persisted review row.
+              </div>
+            ) : null}
+            {!currentRun && displayedOutcomes.length === 0 ? (
+              <div className="rounded-2xl border border-line bg-black/20 p-4 text-sm text-muted">
+                No persisted job outcomes are available yet.
+              </div>
+            ) : null}
+          </div>
         </Card>
 
         <Card className="space-y-4">
@@ -644,40 +856,6 @@ export function RunScriptBuilder() {
             {!status ? (
               <div className="rounded-2xl border border-line bg-black/20 p-4 text-sm text-muted">
                 Loading checks...
-              </div>
-            ) : null}
-          </div>
-        </Card>
-
-        <Card className="space-y-3">
-          <SectionTitle
-            eyebrow="Progress"
-            title="Latest job outcomes"
-            subtitle="Rows appear as the engine writes review history for this run."
-          />
-          <div className="space-y-3">
-            {(currentRun?.progress?.reviews ?? []).slice(-8).reverse().map((review) => (
-              <div key={`${review.createdAt}-${review.jobUrl}-${review.status}`} className="rounded-2xl border border-line bg-black/20 p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge tone={outcomeTone(review)}>{review.status}</Badge>
-                  {review.score != null ? <Badge tone="neutral">Score {review.score}</Badge> : null}
-                  {review.decision ? <Badge tone={review.decision === "APPLY" ? "info" : "warn"}>{review.decision}</Badge> : null}
-                </div>
-                <p className="mt-3 text-sm font-semibold text-text">
-                  {review.title ?? "Unknown role"}
-                  {review.company ? ` at ${review.company}` : ""}
-                </p>
-                <p className="mt-1 text-xs text-muted">{review.summary ?? review.jobUrl}</p>
-              </div>
-            ))}
-            {currentRun && (currentRun.progress?.reviews.length ?? 0) === 0 ? (
-              <div className="rounded-2xl border border-line bg-black/20 p-4 text-sm text-muted">
-                Waiting for the first persisted review row.
-              </div>
-            ) : null}
-            {!currentRun ? (
-              <div className="rounded-2xl border border-line bg-black/20 p-4 text-sm text-muted">
-                No dashboard-started run is active yet.
               </div>
             ) : null}
           </div>

@@ -231,6 +231,46 @@ describe("engine-db", () => {
     expect(closeMock).toHaveBeenCalledOnce();
   });
 
+  it("reads only AI-approved, successfully submitted applications", async () => {
+    queueStatements([
+      {
+        all: [
+          {
+            id: "applied-1",
+            jobUrl: "https://www.linkedin.com/jobs/view/1",
+            platform: "linkedin",
+            source: "easy-apply-batch",
+            status: "SUBMITTED",
+            score: 86,
+            threshold: 40,
+            decision: "APPLY",
+            policyAllowed: 1,
+            reasons: "[]",
+            summary: "Submitted",
+            detailsJson: "{}",
+            dashboardRunId: "run-1",
+            createdAt: "2026-08-31T10:00:00.000Z",
+            jobPostingId: "job-1",
+            title: "Product Engineer",
+            company: "Acme",
+            companyLogoUrl: null,
+            companyLinkedinUrl: null,
+            location: "Remote",
+            normalizedJson: "{}",
+          },
+        ],
+      },
+    ]);
+
+    const { readAppliedJobs } = await import("@/lib/engine-db");
+    expect(readAppliedJobs(10)[0]?.status).toBe("SUBMITTED");
+    const sql = String(prepareMock.mock.calls[0]?.[0]);
+    expect(sql).toContain("h.status = 'SUBMITTED'");
+    expect(sql).toContain("h.decision = 'APPLY'");
+    expect(sql).toContain("h.policyAllowed = 1");
+    expect(sql).toContain("$.submittedByBot");
+  });
+
   it("searches across all collections and sorts newest first", async () => {
     queueStatements([
       {

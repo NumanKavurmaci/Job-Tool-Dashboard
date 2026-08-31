@@ -6,7 +6,7 @@ import { PageShell } from "@/components/dashboard/page-shell";
 import { StatsOverview } from "@/components/dashboard/stats-overview";
 import { getDashboardData } from "@/lib/dashboard-data";
 import { readEngineConfigStatus } from "@/lib/engine-status";
-import { getCurrentRun } from "@/lib/engine-runner";
+import { getRuns } from "@/lib/engine-runner";
 import { getBlockingRunChecks } from "@/lib/run-readiness";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 export default async function HomePage() {
   const data = getDashboardData();
   const configStatus = await readEngineConfigStatus();
-  const currentRun = getCurrentRun();
+  const runs = getRuns();
   const runBlockers = getBlockingRunChecks("apply-batch", configStatus.checks);
 
   return (
@@ -25,7 +25,7 @@ export default async function HomePage() {
         subtitle="See the active run, unblock prerequisites, recover incomplete applications, then inspect deeper history when needed."
       />
       <HomeOperationsSection
-        currentRun={currentRun}
+        runs={runs}
         incompleteCount={data.stats.incompleteApplyCount}
         runBlockers={runBlockers}
       />

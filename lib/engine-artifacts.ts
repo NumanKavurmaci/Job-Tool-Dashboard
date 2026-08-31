@@ -418,18 +418,32 @@ function isSubmittedJob(value: unknown): boolean {
     return false;
   }
 
-  const result = ((value as Record<string, unknown>).result ?? null) as Record<string, unknown> | null;
-  const status = stringValue(result?.status)?.toLowerCase();
+  const record = value as Record<string, unknown>;
+  const result = (record.result ?? null) as Record<string, unknown> | null;
+  const status = (stringValue(result?.status) ?? stringValue(record.status))?.toLowerCase();
   const stopReason = stringValue(result?.stopReason)?.toLowerCase();
   return status === "submitted" || stopReason?.includes("submitted") === true;
 }
 
 function hasAttemptResult(value: unknown): boolean {
-  return Boolean(
-    value &&
-      typeof value === "object" &&
-      ((value as Record<string, unknown>).result || (value as Record<string, unknown>).application),
-  );
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  if (record.result || record.application) {
+    return true;
+  }
+
+  // Some providers (notably Kariyer.net) persist their terminal batch outcome
+  // directly on the job instead of nesting it under `result`/`application`.
+  const status = stringValue(record.status)?.toLowerCase();
+  return status === "submitted" ||
+    status === "failed" ||
+    status === "error" ||
+    status === "ready_to_submit" ||
+    status === "already_applied" ||
+    status?.startsWith("stopped_") === true;
 }
 
 function parseOutcomeJobs(resultRecord: Record<string, unknown> | null): ParsedArtifactDetails["outcomeJobs"] {
