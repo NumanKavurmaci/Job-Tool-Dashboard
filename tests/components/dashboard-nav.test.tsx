@@ -16,6 +16,8 @@ describe("DashboardNav", () => {
     expect(html).toContain("Recommendations");
     expect(html).toContain('href="/applied"');
     expect(html).toContain("Applied");
+    expect(html).toContain('href="/profile"');
+    expect(html).toContain("Profile");
     expect(html).not.toContain(">Overview<");
     expect(html).toContain("Artifacts");
     expect(html).toContain("More");

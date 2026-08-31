@@ -7,7 +7,7 @@
 [![SQLite](https://img.shields.io/badge/SQLite-engine%20data-07405e)](https://sqlite.org/)
 [![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue)](./LICENSE)
 
-Job Tool Dashboard turns the local `Job Tool` engine workspace into a readable, searchable, and controllable UI. It shows recommendations, review history, decisions, answers, artifacts, companies, logs, and live run progress without moving your personal job data into a hosted service.
+Job Tool Dashboard turns the local `Job Tool` engine workspace into a readable, searchable, and controllable UI. It shows recommendations, review history, decisions, answers, artifacts, companies, logs, and live run progress without moving your personal job data into a hosted service. A guarded profile editor can update the engine's local candidate profile from the dashboard.
 
 ## ✨ What It Shows
 
@@ -22,6 +22,7 @@ Job Tool Dashboard turns the local `Job Tool` engine workspace into a readable, 
 | `/artifacts` | Batch reports, external apply reports, screenshots, and run diagnostics. |
 | `/companies` | Company-level aggregates, logos, LinkedIn URLs, and review counts. |
 | `/search` | Cross-collection search across stored engine data. |
+| `/profile` | Edit the engine's local `user/profile.json` with structured controls and conflict detection. |
 
 ## 🔗 How It Connects To The Engine
 
