@@ -16,6 +16,13 @@ export type RunProgressReview = {
   title: string | null;
   company: string | null;
   location: string | null;
+  applicationType?: "easy_apply" | "external" | null;
+  externalApplyUrl?: string | null;
+};
+
+type RunProgressReviewRow = Omit<RunProgressReview, "createdAt"> & {
+  createdAt: string | number;
+  detailsJson: string | null;
 };
 
 export type RunProgressSummary = {
@@ -118,6 +125,7 @@ export function readRunProgress(args: {
           h.decision,
           h.policyAllowed,
           h.summary,
+          h.detailsJson,
           COALESCE(j.title, (
             SELECT jp.title FROM JobPosting jp WHERE jp.url = h.jobUrl LIMIT 1
           )) AS title,
@@ -137,18 +145,18 @@ export function readRunProgress(args: {
         LIMIT ?
         `,
       )
-      .all(...params, args.limit ?? 200) as Array<Omit<RunProgressReview, "createdAt"> & { createdAt: string | number }>;
+      .all(...params, args.limit ?? 200) as RunProgressReviewRow[];
 
     const persistedReviews = collapseReviewOutcomes(
-      rows.map((row) => ({
-        ...row,
-        createdAt: normalizeCreatedAt(row.createdAt),
-      })),
+      rows.map(mapReviewRow),
     );
     const latestArtifact = readLatestRunArtifact(args.startedAt, args.finishedAt, args.runId);
-    const reviews = persistedReviews.length > 0
+    const baseReviews = persistedReviews.length > 0
       ? persistedReviews
       : readArtifactOutcomeReviews(latestArtifact);
+    const finishedAtBound = finishedAtMs !== null && Number.isFinite(finishedAtMs) ? finishedAtMs : null;
+    const logEntries = readRecentLogEntries(startedAtMs, finishedAtBound, args.runId);
+    const reviews = enrichReviewsWithRuntimeSignals(baseReviews, logEntries);
     const terminalOutcome = readArtifactTerminalOutcome(latestArtifact);
 
     const uniqueReviewedJobs = new Set(reviews.map((review) => review.jobUrl));
@@ -160,8 +168,7 @@ export function readRunProgress(args: {
       applyDecisionCount: reviews.filter((review) => review.decision === "APPLY").length,
       currentActivity: inferCurrentActivity({
         startedAtMs,
-        finishedAtMs: finishedAtMs !== null && Number.isFinite(finishedAtMs) ? finishedAtMs : null,
-        runId: args.runId,
+        entries: logEntries,
         reviews,
       }),
       latestArtifact,
@@ -204,6 +211,7 @@ export function readLatestJobOutcomes(limit = 8): RunProgressReview[] {
           h.decision,
           h.policyAllowed,
           h.summary,
+          h.detailsJson,
           COALESCE(j.title, (
             SELECT jp.title FROM JobPosting jp WHERE jp.url = h.jobUrl LIMIT 1
           )) AS title,
@@ -217,13 +225,8 @@ export function readLatestJobOutcomes(limit = 8): RunProgressReview[] {
         LEFT JOIN JobPosting j ON j.id = h.jobPostingId
         ORDER BY h.createdAt DESC
         LIMIT ?
-      `).all(Math.max(50, boundedLimit * 8)) as Array<
-        Omit<RunProgressReview, "createdAt"> & { createdAt: string | number }
-      >;
-      persistedReviews = rows.map((row) => ({
-        ...row,
-        createdAt: normalizeCreatedAt(row.createdAt),
-      }));
+      `).all(Math.max(50, boundedLimit * 8)) as RunProgressReviewRow[];
+      persistedReviews = rows.map(mapReviewRow);
     } finally {
       db.close();
     }
@@ -274,6 +277,7 @@ function readArtifactOutcomeReviews(
     title: job.title,
     company: job.company,
     location: job.location,
+    applicationType: job.platform ? "external" : null,
   }));
 }
 
@@ -344,10 +348,98 @@ function normalizeCreatedAt(value: string | number): string {
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : value;
 }
 
+function mapReviewRow(row: RunProgressReviewRow): RunProgressReview {
+  const { detailsJson, ...review } = row;
+  const details = parseJsonObject(detailsJson);
+  const diagnostics = objectValue(details?.diagnostics);
+  const externalApplication = objectValue(details?.externalApplication);
+  const explicitApplicationType = normalizeApplicationType(
+    stringValue(details?.applicationType) ?? stringValue(diagnostics?.applicationType),
+  );
+  const externalApplyUrl =
+    stringValue(details?.externalApplyUrl) ?? stringValue(externalApplication?.canonicalUrl);
+
+  return {
+    ...review,
+    createdAt: normalizeCreatedAt(row.createdAt),
+    applicationType:
+      explicitApplicationType ?? (externalApplication || externalApplyUrl ? "external" : null),
+    externalApplyUrl,
+  };
+}
+
+function enrichReviewsWithRuntimeSignals(
+  reviews: RunProgressReview[],
+  entries: Array<Record<string, unknown> & { time: number }>,
+): RunProgressReview[] {
+  const externalByUrl = new Map<string, string | null>();
+
+  for (const entry of entries) {
+    const resultStatus = stringValue(entry.resultStatus);
+    const message = stringValue(entry.msg);
+    if (
+      resultStatus !== "stopped_external_apply" &&
+      message !== "Starting LinkedIn external apply handoff." &&
+      message !== "LinkedIn external apply handoff finished."
+    ) {
+      continue;
+    }
+
+    const jobUrl = normalizeJobUrl(stringValue(entry.jobUrl) ?? stringValue(entry.url));
+    if (!jobUrl) {
+      continue;
+    }
+
+    externalByUrl.set(
+      jobUrl,
+      stringValue(entry.externalApplyUrl) ?? stringValue(entry.canonicalUrl),
+    );
+  }
+
+  return reviews.map((review) => {
+    const signal = externalByUrl.get(normalizeJobUrl(review.jobUrl) ?? review.jobUrl);
+    if (signal === undefined) {
+      return review;
+    }
+
+    return {
+      ...review,
+      applicationType: "external",
+      externalApplyUrl: signal ?? review.externalApplyUrl ?? null,
+    };
+  });
+}
+
+function parseJsonObject(value: string | null): Record<string, unknown> | null {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return objectValue(JSON.parse(value));
+  } catch {
+    return null;
+  }
+}
+
+function objectValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? value as Record<string, unknown> : null;
+}
+
+function normalizeApplicationType(value: string | null): "easy_apply" | "external" | null {
+  const normalized = value?.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (normalized === "easy_apply") {
+    return "easy_apply";
+  }
+  if (normalized === "external" || normalized === "external_apply") {
+    return "external";
+  }
+  return null;
+}
+
 function inferCurrentActivity(args: {
   startedAtMs: number;
-  finishedAtMs: number | null;
-  runId?: string;
+  entries: Array<Record<string, unknown> & { time: number }>;
   reviews: RunProgressReview[];
 }): RunCurrentActivity | null {
   if (!Number.isFinite(args.startedAtMs)) {
@@ -374,7 +466,7 @@ function inferCurrentActivity(args: {
     location: null,
   };
 
-  for (const entry of readRecentLogEntries(args.startedAtMs, args.finishedAtMs, args.runId)) {
+  for (const entry of args.entries) {
     const updatedAt = new Date(entry.time).toISOString();
     const event = stringValue(entry.event);
     const message = stringValue(entry.msg);

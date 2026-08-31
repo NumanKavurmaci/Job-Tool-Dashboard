@@ -2,6 +2,7 @@
 
 import { AlertTriangle, CheckCircle2, CircleStop, Copy, Play, RefreshCw, Terminal } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { ApplicationTypeBadge } from "@/components/dashboard/application-type-badge";
 import { Badge, Card, SectionTitle } from "@/components/ui";
 import {
   RUN_SCRIPT_DEFINITIONS,
@@ -39,6 +40,8 @@ type RunProgressReview = {
   title: string | null;
   company: string | null;
   location: string | null;
+  applicationType?: "easy_apply" | "external" | null;
+  externalApplyUrl?: string | null;
 };
 
 type CurrentRun = {
@@ -237,18 +240,25 @@ export function JobOutcome({
 }) {
   const liveApplyEvaluation = executionMode === "live" && review.status === "EVALUATED" && review.decision === "APPLY";
   const runFinished = runStatus === "completed" || runStatus === "failed" || runStatus === "stopped";
-  const applicationState = review.status === "FAILED" && review.decision === "APPLY"
+  const externalApply = review.applicationType === "external";
+  const applicationState = !externalApply && review.status === "FAILED" && review.decision === "APPLY"
     ? "NOT SUBMITTED"
-    : liveApplyEvaluation
+    : !externalApply && liveApplyEvaluation
       ? runFinished
         ? "NOT SUBMITTED"
         : "SUBMISSION PENDING"
       : null;
+  const externalApplyMessage = externalApply && review.decision === "APPLY" && review.status !== "SUBMITTED"
+    ? runFinished
+      ? "This job uses an external application form. The run ended before submission was confirmed."
+      : "This job continues on an external application form. Submission has not been confirmed yet."
+    : null;
 
   return (
     <div className="rounded-2xl border border-line bg-black/20 p-4">
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone={outcomeTone(review)}>{review.status}</Badge>
+        <ApplicationTypeBadge value={review.applicationType} />
         {applicationState ? (
           <Badge tone={applicationState === "NOT SUBMITTED" ? "skip" : "warn"}>{applicationState}</Badge>
         ) : null}
@@ -271,6 +281,9 @@ export function JobOutcome({
             ? "The APPLY decision did not produce a confirmed submission."
             : "The job passed scoring, but submission has not been confirmed yet."}
         </p>
+      ) : null}
+      {externalApplyMessage ? (
+        <p className="mt-2 text-xs font-medium text-violet-200">{externalApplyMessage}</p>
       ) : null}
     </div>
   );

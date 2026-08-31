@@ -87,4 +87,33 @@ describe("RunScriptBuilder", () => {
     expect(html).toContain("NOT SUBMITTED");
     expect(html).toContain("did not produce a confirmed submission");
   });
+
+  it("uses the external apply badge and a specific handoff message for external applications", () => {
+    const html = renderToStaticMarkup(
+      <JobOutcome
+        executionMode="live"
+        runStatus="stopped"
+        review={{
+          createdAt: "2026-08-31T12:00:00.000Z",
+          jobUrl: "https://www.linkedin.com/jobs/view/4461229300",
+          status: "EVALUATED",
+          score: 70,
+          threshold: 40,
+          decision: "APPLY",
+          policyAllowed: 1,
+          summary: "Score 70 meets the configured threshold of 40.",
+          title: "Frontend Developer",
+          company: "micro1",
+          location: "Remote",
+          applicationType: "external",
+          externalApplyUrl: "https://jobs.micro1.ai/post/example",
+        }}
+      />,
+    );
+
+    expect(html).toContain("External Apply");
+    expect(html).toContain("The run ended before submission was confirmed.");
+    expect(html).not.toContain("NOT SUBMITTED");
+    expect(html).not.toContain("The APPLY decision did not produce a confirmed submission.");
+  });
 });

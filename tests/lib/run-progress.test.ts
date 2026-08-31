@@ -123,6 +123,42 @@ describe("run progress", () => {
     });
   });
 
+  it("identifies external apply outcomes from live processing logs before batch history is finalized", async () => {
+    writeFileSync(
+      path.join(tempDir, "logs", "app.log"),
+      [
+        JSON.stringify({
+          level: 30,
+          time: 1781017056000,
+          url: "https://www.linkedin.com/jobs/view/123",
+          finalDecision: "APPLY",
+          totalScore: 72,
+          msg: "LinkedIn Easy Apply job evaluated",
+        }),
+        JSON.stringify({
+          level: 30,
+          time: 1781017057000,
+          jobUrl: "https://www.linkedin.com/jobs/view/123",
+          finalDecision: "APPLY",
+          resultStatus: "stopped_external_apply",
+          externalApplyUrl: "https://apply.example.com/jobs/123",
+          msg: "Finished application processing for approved job",
+        }),
+      ].join("\n"),
+    );
+
+    const { readRunProgress } = await import("@/lib/run-progress");
+    const progress = readRunProgress({
+      startedAt: new Date(1781017050000).toISOString(),
+      mode: "apply-batch",
+    });
+
+    expect(progress.reviews[0]).toMatchObject({
+      applicationType: "external",
+      externalApplyUrl: "https://apply.example.com/jobs/123",
+    });
+  });
+
   it("collapses repeated review history into the latest canonical job outcome", async () => {
     const db = new Database(path.join(tempDir, "prisma", "dev.db"));
     db.prepare(`
