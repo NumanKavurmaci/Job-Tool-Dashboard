@@ -147,7 +147,7 @@ describe("run config", () => {
     ]);
   });
 
-  it("builds Kariyer listing batches as dry-run by default and live only when explicit", () => {
+  it("builds Kariyer listing batches as live by default and dry-run only when explicit", () => {
     const url = "https://www.kariyer.net/is-ilanlari/yazilim-gelistirme?sort=date";
 
     expect(buildRunArgs("apply-batch", { url, count: 8 })).toEqual([
@@ -155,48 +155,63 @@ describe("run config", () => {
       url,
       "--count",
       "8",
-      "--dry-run",
     ]);
-    expect(buildRunArgs("apply-batch", { url, count: 8, dryRun: false })).toEqual([
+    expect(buildRunArgs("apply-batch", { url, count: 8, dryRun: true })).toEqual([
       "apply-batch",
       url,
       "--count",
       "8",
+      "--dry-run",
     ]);
   });
 
-  it("defaults every apply command to dry-run unless false is explicit", () => {
+  it("defaults every apply command to live unless dry-run is explicit", () => {
     expect(
       buildRunArgs("apply", {
         url: "https://www.linkedin.com/jobs/view/123/",
       }),
-    ).toContain("--dry-run");
+    ).not.toContain("--dry-run");
     expect(
       buildRunArgs("external-apply", {
         url: "https://jobs.example.com/apply/123",
       }),
-    ).toContain("--dry-run");
+    ).not.toContain("--dry-run");
     expect(
       buildRunArgs("easy-apply", {
         url: "https://www.linkedin.com/jobs/view/123/",
-        dryRun: false,
+        dryRun: true,
       }),
-    ).not.toContain("--dry-run");
+    ).toContain("--dry-run");
   });
 
   it("rejects out-of-range batch counts and thresholds", () => {
     expect(() =>
       buildRunArgs("apply-batch", {
         url: "https://www.linkedin.com/jobs/collections/easy-apply",
-        count: 101,
+        count: 1001,
       }),
-    ).toThrow("Job count must be an integer between 1 and 100.");
+    ).toThrow("Job count must be an integer between 1 and 1000.");
     expect(() =>
       buildRunArgs("explore-batch", {
         url: "https://www.linkedin.com/jobs/collections/easy-apply",
         scoreThreshold: 0,
       }),
     ).toThrow("Score threshold must be an integer between 1 and 100.");
+  });
+
+  it("uses AI scoring, live apply, and a 1000-job batch ceiling by default", () => {
+    for (const type of ["explore-batch", "explore", "easy-apply-batch", "apply-batch", "decide", "score"] as const) {
+      const scoringField = getRunScriptDefinition(type).fields.find((field) => field.key === "scoringMode");
+      if (scoringField) expect(scoringField.defaultValue).toBe("ai");
+    }
+
+    for (const type of ["easy-apply", "easy-apply-batch", "apply", "apply-batch", "external-apply"] as const) {
+      expect(getRunScriptDefinition(type).fields.find((field) => field.key === "dryRun")?.defaultValue).toBe(false);
+    }
+
+    for (const type of ["explore-batch", "easy-apply-batch", "apply-batch"] as const) {
+      expect(getRunScriptDefinition(type).fields.find((field) => field.key === "count")?.max).toBe(1000);
+    }
   });
 
   it("does not ship a real LinkedIn job id as a single-run default", () => {

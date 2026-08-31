@@ -140,7 +140,7 @@ describe("run API routes", () => {
     stopEngineRunMock.mockReturnValue(null);
   });
 
-  it("defaults an API-started apply run to dry-run", async () => {
+  it("defaults an API-started apply run to live mode", async () => {
     const response = await startRun(
       requestFor("/api/run/start", {
         type: "easy-apply",
@@ -153,15 +153,14 @@ describe("run API routes", () => {
     expect(startEngineRunMock).toHaveBeenCalledWith([
       "easy-apply",
       "https://www.linkedin.com/jobs/view/123/",
-      "--dry-run",
     ]);
   });
 
-  it("uses the live path only when the existing dry-run toggle sends false", async () => {
+  it("uses the dry-run path only when the toggle sends true", async () => {
     const response = await startRun(
       requestFor("/api/run/start", {
         type: "easy-apply",
-        values: { url: "https://www.linkedin.com/jobs/view/123/", dryRun: false },
+        values: { url: "https://www.linkedin.com/jobs/view/123/", dryRun: true },
       }),
     );
 
@@ -169,6 +168,7 @@ describe("run API routes", () => {
     expect(startEngineRunMock).toHaveBeenCalledWith([
       "easy-apply",
       "https://www.linkedin.com/jobs/view/123/",
+      "--dry-run",
     ]);
   });
 
@@ -218,7 +218,7 @@ describe("run API routes", () => {
         type: "explore-batch",
         values: {
           url: "https://www.linkedin.com/jobs/collections/easy-apply",
-          count: 101,
+          count: 1001,
         },
       }),
     );
@@ -263,22 +263,21 @@ describe("run API routes", () => {
     expect(startEngineRunMock).toHaveBeenCalledWith([
       "apply-batch",
       "https://jobs.ashbyhq.com/example",
-      "--dry-run",
     ]);
   });
 
   it("accepts canonical Kariyer listing batches in dry-run and live modes", async () => {
     const url = "https://www.kariyer.net/is-ilanlari/yazilim-gelistirme?sort=date";
-    const dryRun = await startRun(
+    const live = await startRun(
       requestFor("/api/run/start", {
         type: "apply-batch",
         values: { url, count: 4 },
       }),
     );
-    const live = await startRun(
+    const dryRun = await startRun(
       requestFor("/api/run/start", {
         type: "apply-batch",
-        values: { url, count: 4, dryRun: false },
+        values: { url, count: 4, dryRun: true },
       }),
     );
 
@@ -289,13 +288,13 @@ describe("run API routes", () => {
       url,
       "--count",
       "4",
-      "--dry-run",
     ]);
     expect(startEngineRunMock).toHaveBeenNthCalledWith(2, [
       "apply-batch",
       url,
       "--count",
       "4",
+      "--dry-run",
     ]);
   });
 

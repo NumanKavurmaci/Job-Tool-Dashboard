@@ -226,6 +226,56 @@ function FieldInput({
   );
 }
 
+export function JobOutcome({
+  review,
+  executionMode,
+  runStatus,
+}: {
+  review: RunProgressReview;
+  executionMode?: CurrentRun["executionMode"];
+  runStatus?: CurrentRun["status"];
+}) {
+  const liveApplyEvaluation = executionMode === "live" && review.status === "EVALUATED" && review.decision === "APPLY";
+  const runFinished = runStatus === "completed" || runStatus === "failed" || runStatus === "stopped";
+  const applicationState = review.status === "FAILED" && review.decision === "APPLY"
+    ? "NOT SUBMITTED"
+    : liveApplyEvaluation
+      ? runFinished
+        ? "NOT SUBMITTED"
+        : "SUBMISSION PENDING"
+      : null;
+
+  return (
+    <div className="rounded-2xl border border-line bg-black/20 p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge tone={outcomeTone(review)}>{review.status}</Badge>
+        {applicationState ? (
+          <Badge tone={applicationState === "NOT SUBMITTED" ? "skip" : "warn"}>{applicationState}</Badge>
+        ) : null}
+        {review.score != null ? <Badge tone="neutral">Score {review.score}</Badge> : null}
+        {review.decision ? <Badge tone={review.decision === "APPLY" ? "info" : "warn"}>{review.decision}</Badge> : null}
+      </div>
+      <a
+        className="mt-3 inline-block text-sm font-semibold text-text transition hover:text-blue-300 hover:underline"
+        href={review.jobUrl}
+        rel="noreferrer"
+        target="_blank"
+      >
+        {review.title ?? "Unknown role"}
+        {review.company ? ` at ${review.company}` : ""}
+      </a>
+      <p className="mt-1 text-xs text-muted">{review.summary ?? review.jobUrl}</p>
+      {applicationState ? (
+        <p className="mt-2 text-xs font-medium text-amber-200">
+          {applicationState === "NOT SUBMITTED"
+            ? "The APPLY decision did not produce a confirmed submission."
+            : "The job passed scoring, but submission has not been confirmed yet."}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function RunScriptBuilder() {
   const [scriptType, setScriptType] = useState<RunScriptType>("apply-batch");
   const [values, setValues] = useState<RunFormValues>(() => buildInitialValues("apply-batch"));
@@ -263,6 +313,18 @@ export function RunScriptBuilder() {
     [runs],
   );
   const currentRun = runs.find((run) => run.id === selectedRunId) ?? runs[0] ?? null;
+  const unconfirmedApplyCount = useMemo(() => {
+    if (
+      currentRun?.executionMode !== "live"
+      || !["completed", "failed", "stopped"].includes(currentRun.status)
+    ) {
+      return 0;
+    }
+
+    return (currentRun.progress?.reviews ?? []).filter(
+      (review) => review.status === "EVALUATED" && review.decision === "APPLY",
+    ).length;
+  }, [currentRun]);
   const visibleRuns = useMemo(() => {
     const prioritized = [...activeRuns, ...runs.filter((run) => !activeRuns.some((active) => active.id === run.id))];
     return prioritized.slice(0, 4);
@@ -616,7 +678,7 @@ export function RunScriptBuilder() {
               ["Evaluated", currentRun?.progress?.evaluatedCount ?? 0],
               ["Apply", currentRun?.progress?.applyDecisionCount ?? 0],
               ["Submitted", currentRun?.progress?.submittedCount ?? 0],
-              ["Failed", currentRun?.progress?.failedCount ?? 0],
+              ["Failed", (currentRun?.progress?.failedCount ?? 0) + unconfirmedApplyCount],
             ].map(([label, value]) => (
               <div key={label} className="rounded-2xl border border-line bg-black/20 p-4">
                 <p className="text-xs uppercase tracking-[0.2em] text-muted">{label}</p>
@@ -706,6 +768,36 @@ export function RunScriptBuilder() {
           )}
         </Card>
 
+        <Card className="space-y-3">
+          <SectionTitle
+            eyebrow="Progress"
+            title="Latest job outcomes"
+            subtitle={currentRun
+              ? "Rows appear from review history or the selected run artifact."
+              : "Showing the latest persisted outcomes even after the dashboard process restarts."}
+          />
+          <div className="space-y-3">
+            {displayedOutcomes.map((review) => (
+              <JobOutcome
+                key={`${review.createdAt}-${review.jobUrl}-${review.status}`}
+                executionMode={currentRun?.executionMode}
+                review={review}
+                runStatus={currentRun?.status}
+              />
+            ))}
+            {currentRun && (currentRun.progress?.reviews.length ?? 0) === 0 ? (
+              <div className="rounded-2xl border border-line bg-black/20 p-4 text-sm text-muted">
+                Waiting for the first persisted review row.
+              </div>
+            ) : null}
+            {!currentRun && displayedOutcomes.length === 0 ? (
+              <div className="rounded-2xl border border-line bg-black/20 p-4 text-sm text-muted">
+                No persisted job outcomes are available yet.
+              </div>
+            ) : null}
+          </div>
+        </Card>
+
         <Card className="space-y-4">
           <SectionTitle
             eyebrow="Preflight"
@@ -751,42 +843,6 @@ export function RunScriptBuilder() {
             {!status ? (
               <div className="rounded-2xl border border-line bg-black/20 p-4 text-sm text-muted">
                 Loading checks...
-              </div>
-            ) : null}
-          </div>
-        </Card>
-
-        <Card className="space-y-3">
-          <SectionTitle
-            eyebrow="Progress"
-            title="Latest job outcomes"
-            subtitle={currentRun
-              ? "Rows appear from review history or the selected run artifact."
-              : "Showing the latest persisted outcomes even after the dashboard process restarts."}
-          />
-          <div className="space-y-3">
-            {displayedOutcomes.map((review) => (
-              <div key={`${review.createdAt}-${review.jobUrl}-${review.status}`} className="rounded-2xl border border-line bg-black/20 p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge tone={outcomeTone(review)}>{review.status}</Badge>
-                  {review.score != null ? <Badge tone="neutral">Score {review.score}</Badge> : null}
-                  {review.decision ? <Badge tone={review.decision === "APPLY" ? "info" : "warn"}>{review.decision}</Badge> : null}
-                </div>
-                <p className="mt-3 text-sm font-semibold text-text">
-                  {review.title ?? "Unknown role"}
-                  {review.company ? ` at ${review.company}` : ""}
-                </p>
-                <p className="mt-1 text-xs text-muted">{review.summary ?? review.jobUrl}</p>
-              </div>
-            ))}
-            {currentRun && (currentRun.progress?.reviews.length ?? 0) === 0 ? (
-              <div className="rounded-2xl border border-line bg-black/20 p-4 text-sm text-muted">
-                Waiting for the first persisted review row.
-              </div>
-            ) : null}
-            {!currentRun && displayedOutcomes.length === 0 ? (
-              <div className="rounded-2xl border border-line bg-black/20 p-4 text-sm text-muted">
-                No persisted job outcomes are available yet.
               </div>
             ) : null}
           </div>
