@@ -172,6 +172,30 @@ export type RecommendationRow = {
   normalizedJson: string | null;
 };
 
+export type AppliedJobRow = {
+  id: string;
+  jobUrl: string;
+  platform: string | null;
+  source: string;
+  status: string;
+  score: number | null;
+  threshold: number | null;
+  decision: string;
+  policyAllowed: number;
+  reasons: string;
+  summary: string | null;
+  detailsJson: string | null;
+  dashboardRunId: string | null;
+  createdAt: string;
+  jobPostingId: string | null;
+  title: string | null;
+  company: string | null;
+  companyLogoUrl: string | null;
+  companyLinkedinUrl: string | null;
+  location: string | null;
+  normalizedJson: string | null;
+};
+
 export const SEARCH_COLLECTION_OPTIONS: Array<{
   value: SearchCollectionOption;
   label: string;
@@ -248,7 +272,16 @@ function compareSearchResults(sort: SearchSort, left: SearchResultRow, right: Se
   return sort === "oldest" ? leftTime - rightTime : rightTime - leftTime;
 }
 
-function fallbackPostingField(field: "title" | "company" | "companyLinkedinUrl" | "location", jobUrlColumn: string) {
+function fallbackPostingField(
+  field:
+    | "title"
+    | "company"
+    | "companyLogoUrl"
+    | "companyLinkedinUrl"
+    | "location"
+    | "normalizedJson",
+  jobUrlColumn: string,
+) {
   return `(
     SELECT jp.${field}
     FROM JobPosting jp
@@ -623,6 +656,65 @@ export function readRecommendations(limit = 40): RecommendationRow[] {
         `,
       )
       .all(limit) as RecommendationRow[];
+  } finally {
+    db.close();
+  }
+}
+
+export function readAppliedJobs(limit = 80): AppliedJobRow[] {
+  const db = openDb();
+  try {
+    return db
+      .prepare(
+        `
+        SELECT
+          h.id,
+          h.jobUrl,
+          h.platform,
+          h.source,
+          h.status,
+          h.score,
+          h.threshold,
+          h.decision,
+          h.policyAllowed,
+          h.reasons,
+          h.summary,
+          h.detailsJson,
+          CASE
+            WHEN json_valid(h.detailsJson) THEN json_extract(h.detailsJson, '$.dashboardRunId')
+            ELSE NULL
+          END AS dashboardRunId,
+          h.createdAt,
+          h.jobPostingId,
+          COALESCE(j.title, ${fallbackPostingField("title", "h.jobUrl")}) AS title,
+          COALESCE(j.company, ${fallbackPostingField("company", "h.jobUrl")}) AS company,
+          COALESCE(j.companyLogoUrl, ${fallbackPostingField("companyLogoUrl", "h.jobUrl")}) AS companyLogoUrl,
+          COALESCE(j.companyLinkedinUrl, ${fallbackPostingField("companyLinkedinUrl", "h.jobUrl")}) AS companyLinkedinUrl,
+          COALESCE(j.location, ${fallbackPostingField("location", "h.jobUrl")}) AS location,
+          COALESCE(j.normalizedJson, ${fallbackPostingField("normalizedJson", "h.jobUrl")}) AS normalizedJson
+        FROM JobReviewHistory h
+        LEFT JOIN JobPosting j ON j.id = h.jobPostingId
+        WHERE h.status = 'SUBMITTED'
+          AND h.decision = 'APPLY'
+          AND h.policyAllowed = 1
+          AND (
+            NOT json_valid(h.detailsJson)
+            OR COALESCE(json_extract(h.detailsJson, '$.submittedByBot'), 1) != 0
+          )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM JobReviewHistory newer
+            WHERE newer.jobUrl = h.jobUrl
+              AND newer.status = 'SUBMITTED'
+              AND newer.decision = 'APPLY'
+              AND newer.policyAllowed = 1
+              AND newer.createdAt > h.createdAt
+          )
+        ORDER BY h.createdAt DESC
+        LIMIT ?
+        `,
+      )
+      .all(limit) as AppliedJobRow[];
   } finally {
     db.close();
   }

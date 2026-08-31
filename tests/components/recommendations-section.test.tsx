@@ -14,7 +14,7 @@ const baseRecommendation = {
   policyAllowed: 1,
   summary: "Strong product engineering match.",
   reasons: JSON.stringify(["React experience", "Remote role"]),
-  detailsJson: null,
+  detailsJson: JSON.stringify({ diagnostics: { applicationType: "easy_apply" } }),
   dashboardRunId: null,
   createdAt: "2026-08-31T10:00:00.000Z",
   updatedAt: "2026-08-31T10:00:00.000Z",
@@ -44,6 +44,7 @@ describe("RecommendationsSection", () => {
     expect(html).toContain("Last 7 days");
     expect(html).toContain("Latest run");
     expect(html).toContain("Last 3 runs");
+    expect(html).toContain("Easy Apply");
   });
 
   it("uses a company initial when no logo was captured", () => {

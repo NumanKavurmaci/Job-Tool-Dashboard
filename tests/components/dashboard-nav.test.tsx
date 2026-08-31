@@ -14,6 +14,9 @@ describe("DashboardNav", () => {
     const html = renderToStaticMarkup(<DashboardNav />);
 
     expect(html).toContain("Recommendations");
+    expect(html).toContain('href="/applied"');
+    expect(html).toContain("Applied");
+    expect(html).not.toContain(">Overview<");
     expect(html).toContain("Artifacts");
     expect(html).toContain("More");
     expect(html).toContain('href="/reviews"');

@@ -14,6 +14,8 @@ import {
 import { useMemo, useState } from "react";
 import type { DashboardData } from "@/lib/dashboard-data";
 import { Badge, Card, SectionTitle } from "@/components/ui";
+import { ApplicationTypeBadge } from "@/components/dashboard/application-type-badge";
+import { CompanyLogo } from "@/components/dashboard/company-logo";
 
 type RecommendationDetails = {
   scoreThreshold?: number | null;
@@ -29,6 +31,7 @@ type RecommendationDetails = {
 type NormalizedRecommendationJob = {
   remoteType?: string | null;
   seniority?: string | null;
+  applicationType?: string | null;
 };
 
 type ViewMode = "grid" | "list" | "expanded";
@@ -36,52 +39,6 @@ type TimeFilter = "all" | "last-7-days";
 type RunFilter = "all" | "latest" | "last-3";
 
 const LAST_SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-
-function CompanyLogo({
-  company,
-  logoUrl,
-  linkedinUrl,
-}: {
-  company: string | null;
-  logoUrl: string | null;
-  linkedinUrl: string | null;
-}) {
-  const [imageFailed, setImageFailed] = useState(false);
-  const companyName = company ?? "Unknown company";
-  const hasRenderableLogo = Boolean(logoUrl) && !imageFailed;
-  const logo = hasRenderableLogo ? (
-    <img
-      src={logoUrl ?? undefined}
-      alt={`${companyName} logo`}
-      className="h-full w-full object-contain"
-      loading="lazy"
-      referrerPolicy="no-referrer"
-      onError={() => setImageFailed(true)}
-    />
-  ) : (
-    <span className="text-lg font-bold text-sky-100" aria-hidden="true">
-      {companyName.slice(0, 1).toUpperCase()}
-    </span>
-  );
-
-  const className = `flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/10 p-2 shadow-[0_12px_28px_rgba(2,6,23,0.28)] ${
-    hasRenderableLogo ? "bg-white" : "bg-sky-300/10"
-  }`;
-
-  return linkedinUrl ? (
-    <a
-      href={linkedinUrl}
-      target="_blank"
-      rel="noreferrer"
-      className={`${className} transition hover:-translate-y-0.5 hover:border-sky-300/40`}
-      aria-label={`${companyName} LinkedIn company page`}
-    >
-      {logo}
-    </a>
-  ) : (
-    <div className={className}>{logo}</div>
-  );
-}
 
 function parseReasons(value: string): string[] {
   try {
@@ -411,6 +368,8 @@ export function RecommendationsSection({
             const reasons = parseReasons(recommendation.reasons).slice(0, 3);
             const details = parseJson<RecommendationDetails>(recommendation.detailsJson);
             const normalized = parseJson<NormalizedRecommendationJob>(recommendation.normalizedJson);
+            const applicationType =
+              details?.diagnostics?.applicationType ?? normalized?.applicationType ?? null;
             const signals = buildSignals({
               recommendation,
               details,
@@ -476,6 +435,7 @@ export function RecommendationsSection({
                         <Badge tone={recommendation.policyAllowed ? "apply" : "warn"}>
                           {recommendation.policyAllowed ? "Policy pass" : "Policy blocked"}
                         </Badge>
+                        <ApplicationTypeBadge value={applicationType} />
                         {signals.slice(0, 3).map((signal) => (
                           <Badge key={`${recommendation.id}-${signal}`} tone="neutral">
                             {signal}

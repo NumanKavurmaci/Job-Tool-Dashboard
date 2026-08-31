@@ -4,10 +4,10 @@ import { ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui";
 
 const primaryLinks = [
-  { href: "/" as Route, label: "Overview" },
   { href: "/run" as Route, label: "Run" },
   { href: "/search" as Route, label: "Search" },
   { href: "/recommendations" as Route, label: "Recommendations" },
+  { href: "/applied" as Route, label: "Applied" },
   { href: "/artifacts" as Route, label: "Artifacts" },
 ];
 

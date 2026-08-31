@@ -1,6 +1,7 @@
 import { readRecentArtifacts } from "./engine-artifacts";
 import {
   readAnswerCache,
+  readAppliedJobs,
   readDashboardStats,
   readIncompleteApplications,
   readTopApplications,
@@ -21,6 +22,7 @@ export function getDashboardData() {
     stats: readDashboardStats(),
     firms: readRecentFirms(),
     recommendations: readRecommendations(),
+    appliedJobs: readAppliedJobs(),
     decisions: readRecentDecisions(),
     preparedAnswerSets: readPreparedAnswerSets(),
     answerCache: readAnswerCache(),
