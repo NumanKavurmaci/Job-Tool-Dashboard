@@ -128,4 +128,31 @@ describe("RecommendationsSection", () => {
       }).map((recommendation) => recommendation.id),
     ).toEqual(["latest", "second", "third"]);
   });
+
+  it("filters SQLite millisecond timestamps returned as numbers", () => {
+    const nowMs = Date.parse("2026-08-31T12:00:00.000Z");
+    const recommendations = [
+      {
+        ...baseRecommendation,
+        id: "recent-number",
+        dashboardRunId: "run-recent",
+        updatedAt: Date.parse("2026-08-31T10:00:00.000Z"),
+      },
+      {
+        ...baseRecommendation,
+        id: "old-number",
+        dashboardRunId: "run-old",
+        updatedAt: Date.parse("2026-08-20T10:00:00.000Z"),
+      },
+    ];
+
+    expect(
+      filterRecommendations({
+        recommendations,
+        timeFilter: "last-7-days",
+        runFilter: "all",
+        nowMs,
+      }).map((recommendation) => recommendation.id),
+    ).toEqual(["recent-number"]);
+  });
 });

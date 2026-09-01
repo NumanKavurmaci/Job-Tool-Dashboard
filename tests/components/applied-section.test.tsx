@@ -78,4 +78,29 @@ describe("AppliedSection", () => {
       }).map((job) => job.id),
     ).toEqual(["applied-1"]);
   });
+
+  it("filters SQLite millisecond timestamps returned as numbers", () => {
+    const nowMs = Date.parse("2026-08-31T12:00:00.000Z");
+    const jobs = [
+      {
+        ...baseAppliedJob,
+        id: "applied-number",
+        createdAt: Date.parse("2026-08-31T10:00:00.000Z"),
+      },
+      {
+        ...baseAppliedJob,
+        id: "applied-old-number",
+        createdAt: Date.parse("2026-08-20T10:00:00.000Z"),
+      },
+    ];
+
+    expect(
+      filterAppliedJobs({
+        jobs,
+        timeFilter: "last-7-days",
+        runFilter: "all",
+        nowMs,
+      }).map((job) => job.id),
+    ).toEqual(["applied-number"]);
+  });
 });

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { DashboardData } from "@/lib/dashboard-data";
+import { parseTimestamp } from "@/lib/date-time";
 import { Badge, Card, SectionTitle } from "@/components/ui";
 import { ApplicationTypeBadge } from "@/components/dashboard/application-type-badge";
 import { CompanyLogo } from "@/components/dashboard/company-logo";
@@ -129,7 +130,7 @@ function getRecentRunIds(recommendations: DashboardData["recommendations"]) {
       continue;
     }
 
-    const timestamp = Date.parse(recommendation.updatedAt);
+    const timestamp = parseTimestamp(recommendation.updatedAt);
     const previous = runTimestamps.get(recommendation.dashboardRunId) ?? 0;
     runTimestamps.set(
       recommendation.dashboardRunId,
@@ -160,7 +161,7 @@ export function filterRecommendations(args: {
 
   return recommendations.filter((recommendation) => {
     if (timeFilter === "last-7-days") {
-      const timestamp = Date.parse(recommendation.updatedAt);
+      const timestamp = parseTimestamp(recommendation.updatedAt);
       if (
         !Number.isFinite(timestamp) ||
         timestamp < nowMs - LAST_SEVEN_DAYS_MS ||

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { DashboardData } from "@/lib/dashboard-data";
+import { parseTimestamp } from "@/lib/date-time";
 import { ApplicationTypeBadge, normalizeApplicationType } from "@/components/dashboard/application-type-badge";
 import { CompanyLogo } from "@/components/dashboard/company-logo";
 import { Badge, Card, SectionTitle } from "@/components/ui";
@@ -68,7 +69,7 @@ function getRecentRunIds(jobs: DashboardData["appliedJobs"]) {
   const timestamps = new Map<string, number>();
   for (const job of jobs) {
     if (!job.dashboardRunId) continue;
-    const timestamp = Date.parse(job.createdAt);
+    const timestamp = parseTimestamp(job.createdAt);
     timestamps.set(job.dashboardRunId, Math.max(timestamps.get(job.dashboardRunId) ?? 0, timestamp || 0));
   }
   return [...timestamps.entries()].sort((left, right) => right[1] - left[1]).map(([runId]) => runId);
@@ -91,7 +92,7 @@ export function filterAppliedJobs(args: {
 
   return args.jobs.filter((job) => {
     if (args.timeFilter === "last-7-days") {
-      const timestamp = Date.parse(job.createdAt);
+      const timestamp = parseTimestamp(job.createdAt);
       if (!Number.isFinite(timestamp) || timestamp < nowMs - LAST_SEVEN_DAYS_MS || timestamp > nowMs) {
         return false;
       }
@@ -254,7 +255,7 @@ export function AppliedSection({ appliedJobs }: Pick<DashboardData, "appliedJobs
                       </div>
                       {isExpanded ? (
                         <div className="space-y-3 border-t border-white/10 pt-4 text-sm text-slate-300">
-                          <p><span className="font-semibold text-slate-100">Submitted:</span> {new Date(job.createdAt).toLocaleString()}</p>
+                          <p><span className="font-semibold text-slate-100">Submitted:</span> {new Date(parseTimestamp(job.createdAt)).toLocaleString()}</p>
                           <p><span className="font-semibold text-slate-100">Source:</span> {job.source}</p>
                           <div className="flex flex-wrap gap-2">{reasons.map((reason) => <Badge key={reason} tone="neutral">{reason}</Badge>)}</div>
                           <a href={`/decisions?jobUrl=${encodeURIComponent(job.jobUrl)}`} className="inline-flex items-center gap-2 text-sm text-sky-200 hover:text-sky-100">

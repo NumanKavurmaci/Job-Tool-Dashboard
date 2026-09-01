@@ -160,8 +160,8 @@ export type RecommendationRow = {
   reasons: string;
   detailsJson: string | null;
   dashboardRunId: string | null;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: string | number;
+  updatedAt: string | number;
   jobPostingId: string;
   jobUrl: string;
   title: string | null;
@@ -186,7 +186,7 @@ export type AppliedJobRow = {
   summary: string | null;
   detailsJson: string | null;
   dashboardRunId: string | null;
-  createdAt: string;
+  createdAt: string | number;
   jobPostingId: string | null;
   title: string | null;
   company: string | null;
