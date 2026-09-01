@@ -9,8 +9,8 @@ export default function ProfilePage() {
     <PageShell>
       <PageIntro
         eyebrow="Profile"
-        title="Kariyer profilini tek bir yerden yönet."
-        subtitle="Job Tool eşleştirme ve başvuru akışlarında kullanılan yerel profile.json dosyasını anlaşılır form kontrolleriyle düzenle."
+        title="Manage your career profile in one place."
+        subtitle="Edit the local profile.json used by Job Tool matching and application flows with clear, structured controls."
       />
       <ProfileEditor />
     </PageShell>
